@@ -1,4 +1,4 @@
-PySquashfsImage
-===============
+PySquashfsImage is a lightweight library for reading squashfs image files in Python.
+It provides a way to read squashfs images header and to retrieve encapsulated binaries.
 
-Python library to read Squashfs image files.
+https://github.com/matteomattei/PySquashfsImage
