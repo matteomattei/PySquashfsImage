@@ -166,7 +166,7 @@ class _Squashfs_commons():
 		ret = 0
 		pwr = 1
 		for i in range(start,start+lenght):
-  			ret += ((ord(buf[i])&0xFF)*pwr)
+			ret += ((ord(buf[i])&0xFF)*pwr)
 			pwr *= 0x100
 		return ret
 		
@@ -940,35 +940,35 @@ if __name__=="__main__":
 		for i in range(2,len(sys.argv)):
 			sqashed_filename = sys.argv[i]
 			squashed_file = image.root.select(sqashed_filename)
-			print "--------------%-50.50s --------------"%sqashed_filename
+			print("--------------%-50.50s --------------"%sqashed_filename)
 			if squashed_file==None:
-				print "NOT FOUND"
+				print("NOT FOUND")
 			elif squashed_file.isFolder():
-				print "FOLDER "+squashed_file.getPath()
+				print("FOLDER "+squashed_file.getPath())
 				for child in squashed_file.children:
 					if child.isFolder():
-						print "\t","%-20s"%child.name, "<dir>"
+						print("\t%-20s <dir>" % child.name)
 					else:
-						print "\t","%-20s"%child.name,child.inode.data
+						print("\t%-20s %s" % (child.name,child.inode.data))
 			else:  
-				print squashed_file.getContent()
+				print(squashed_file.getContent())
 	else:
 		for i in image.root.findAll():
 			nodetype = "FILE  "
 			if i.isFolder():
 				nodetype = "FOLDER"
-			print nodetype, i.getPath(), "inode=", i.inode.inode_number, "(",image.read_block_list(i.inode),"+",i.inode.offset,")"
+			print(nodetype +' '+ i.getPath() + " inode= " + i.inode.inode_number + "(" + image.read_block_list(i.inode) + "+" + i.inode.offset + ")")
 			
 		for i in image.root.findAll() :
 			if i.name.endswith(".ini") :
 				content = i.getContent()
-				print "==============%-50.50s (%8d)=============="%(i.getPath(),len(content))
-				print content
+				print("==============%-50.50s (%8d)==============" % (i.getPath(),len(content)))
+				print(content)
 			elif i.name.endswith(".so") :	
 				content = i.getContent()
-				print "++++++++++++++%-50.50s (%8d)++++++++++++++"%(i.getPath(),len(content))
+				print("++++++++++++++%-50.50s (%8d)++++++++++++++" % (i.getPath(),len(content)))
 				oname = i.name+"_saved_"+str(i.inode.inode_number)
-				print "written", oname, "from" , i.name, len(content)
+				print("written %s from %s %d" % (oname, i.name, len(content)))
 				of = file( oname , "wb" )
 				of.write( content )
 				of.close()
