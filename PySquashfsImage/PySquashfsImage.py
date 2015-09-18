@@ -15,6 +15,7 @@ Based on Phillip Lougher <phillip@lougher.demon.co.uk> Unsquash tool
 """
 __all__ = ['SquashFsImage','SquashedFile','SquashInode']
 
+import sys
 import stat
 
 SQUASHFS_CHECK = 2
@@ -82,25 +83,25 @@ def SQUASHFS_MKINODE(A, B): return  ((((A) << 16) + (B))&0xFFFFFFFFFFFFFFFF)
 def SQUASHFS_MK_VFS_INODE(a, b): return	((((a) << 8) + ((b) >> 2) + 1)&0xFFFFFFFF)
 def SQUASHFS_MODE(a): return	((a) & 0xfff)
 def SQUASHFS_FRAGMENT_BYTES(A): return 	((A) * 16)
-def SQUASHFS_FRAGMENT_INDEX(A): return (SQUASHFS_FRAGMENT_BYTES(A) / SQUASHFS_METADATA_SIZE)
+def SQUASHFS_FRAGMENT_INDEX(A): return (SQUASHFS_FRAGMENT_BYTES(A) // SQUASHFS_METADATA_SIZE)
 def SQUASHFS_FRAGMENT_INDEX_OFFSET(A): return	(SQUASHFS_FRAGMENT_BYTES(A) % SQUASHFS_METADATA_SIZE)
-def SQUASHFS_FRAGMENT_INDEXES(A): return ((SQUASHFS_FRAGMENT_BYTES(A) + SQUASHFS_METADATA_SIZE - 1) / SQUASHFS_METADATA_SIZE)
+def SQUASHFS_FRAGMENT_INDEXES(A): return ((SQUASHFS_FRAGMENT_BYTES(A) + SQUASHFS_METADATA_SIZE - 1) // SQUASHFS_METADATA_SIZE)
 def SQUASHFS_FRAGMENT_INDEX_BYTES(A): return (SQUASHFS_FRAGMENT_INDEXES(A) * 8)
 def SQUASHFS_LOOKUP_BYTES(A): return	((A) * 8)
-def SQUASHFS_LOOKUP_BLOCK(A): return	(SQUASHFS_LOOKUP_BYTES(A) / SQUASHFS_METADATA_SIZE)
+def SQUASHFS_LOOKUP_BLOCK(A): return	(SQUASHFS_LOOKUP_BYTES(A) // SQUASHFS_METADATA_SIZE)
 def SQUASHFS_LOOKUP_BLOCK_OFFSET(A): return	(SQUASHFS_LOOKUP_BYTES(A) % SQUASHFS_METADATA_SIZE)
-def SQUASHFS_LOOKUP_BLOCKS(A): return	((SQUASHFS_LOOKUP_BYTES(A) + SQUASHFS_METADATA_SIZE - 1) / SQUASHFS_METADATA_SIZE)
+def SQUASHFS_LOOKUP_BLOCKS(A): return	((SQUASHFS_LOOKUP_BYTES(A) + SQUASHFS_METADATA_SIZE - 1) // SQUASHFS_METADATA_SIZE)
 def SQUASHFS_LOOKUP_BLOCK_BYTES(A): return (SQUASHFS_LOOKUP_BLOCKS(A) * 8)
 def SQUASHFS_ID_BYTES(A): return ((A) * 4)
-def SQUASHFS_ID_BLOCK(A): return (SQUASHFS_ID_BYTES(A) / SQUASHFS_METADATA_SIZE)
+def SQUASHFS_ID_BLOCK(A): return (SQUASHFS_ID_BYTES(A) // SQUASHFS_METADATA_SIZE)
 def SQUASHFS_ID_BLOCK_OFFSET(A): return	(SQUASHFS_ID_BYTES(A) % SQUASHFS_METADATA_SIZE)
-def SQUASHFS_ID_BLOCKS(A): return ((SQUASHFS_ID_BYTES(A) + SQUASHFS_METADATA_SIZE - 1) / SQUASHFS_METADATA_SIZE)
+def SQUASHFS_ID_BLOCKS(A): return ((SQUASHFS_ID_BYTES(A) + SQUASHFS_METADATA_SIZE - 1) // SQUASHFS_METADATA_SIZE)
 def SQUASHFS_ID_BLOCK_BYTES(A): return	(SQUASHFS_ID_BLOCKS(A) * 8)
 def SQUASHFS_XATTR_BYTES(A): return ((A) * 16)
-def SQUASHFS_XATTR_BLOCK(A): return (SQUASHFS_XATTR_BYTES(A) / SQUASHFS_METADATA_SIZE)
+def SQUASHFS_XATTR_BLOCK(A): return (SQUASHFS_XATTR_BYTES(A) // SQUASHFS_METADATA_SIZE)
 def SQUASHFS_XATTR_BLOCK_OFFSET(A): return (SQUASHFS_XATTR_BYTES(A) % SQUASHFS_METADATA_SIZE)
-def SQUASHFS_XATTR_BLOCKS(A):return ((SQUASHFS_XATTR_BYTES(A) + SQUASHFS_METADATA_SIZE - 1) / SQUASHFS_METADATA_SIZE)
-def SQUASHFS_XATTR_BLOCK_BYTES(A): return (SQUASHFS_XATTR_BLOCKS(A) *	8)
+def SQUASHFS_XATTR_BLOCKS(A):return ((SQUASHFS_XATTR_BYTES(A) + SQUASHFS_METADATA_SIZE - 1) // SQUASHFS_METADATA_SIZE)
+def SQUASHFS_XATTR_BLOCK_BYTES(A): return (SQUASHFS_XATTR_BLOCKS(A) * 8)
 def SQUASHFS_XATTR_BLK(A): return ( ((A) >> 16)&0xFFFFFFFF)
 def SQUASHFS_XATTR_OFFSET(A): return (((A) & 0xffff))
 
@@ -123,6 +124,16 @@ SQASHFS_LOOKUP_TYPE= [
 		stat.S_IFSOCK]
 
 
+def str2byt(data):
+	if type( data ) == str:
+		return data.encode("latin-1")
+	return data
+
+def byt2str(data):
+	if type( data ) == bytes:
+		return data.decode("latin-1")
+	return data
+
 class _Compressor:
 	def __init__(self):
 		self.supported = 0
@@ -141,6 +152,9 @@ class _ZlibCompressor:
 		return zlib.decompress(src)
 
 _compressors = ( _Compressor(), _ZlibCompressor() )
+
+if sys.version_info[0] < 3: pyVersionTwo = True
+else: pyVersionTwo = False
 
 class _Squashfs_commons():
 	def makeInteger(self,myfile,length):
@@ -166,7 +180,10 @@ class _Squashfs_commons():
 		ret = 0
 		pwr = 1
 		for i in range(start,start+lenght):
-			ret += ((ord(buf[i])&0xFF)*pwr)
+			if pyVersionTwo:
+				ret += ((ord(buf[i])&0xFF)*pwr)
+			else:
+				ret += ((int(buf[i])&0xFF)*pwr)
 			pwr *= 0x100
 		return ret
 		
@@ -486,10 +503,10 @@ class SquashedFile():
 	      self.parent = parent
 	      
 	def getPath(self) :
-		if self.parent==None:
+		if self.parent == None:
 			return self.name
 		else:
-			return self.parent.getPath()+"/"+self.name
+			return self.parent.getPath() + "/" + byt2str(self.name)
 			
 	def findAll(self):
 		ret = [ self ]
@@ -519,14 +536,14 @@ class SquashedFile():
 		if node==None:
 			return None
 		return node.children
-	
+
 	def select(self,path):
-		if path == "/":
-			path = ""
-		lpath = path.split("/")
+		if path == str2byt("/"):
+			path = str2byt("")
+		lpath = path.split(str2byt("/"))
 		start = self
 		ofs = 0
-		if  lpath[0]=="":
+		if  lpath[0] == str2byt(""):
 			ofs = 1
 			while start.parent!=None:
 				start = start.parent
@@ -535,8 +552,8 @@ class SquashedFile():
 		for child in start.children :
 			if child.name == lpath[ofs] :
 				return child._lselect( lpath, ofs + 1 )
-		return None		
-				
+		return None
+
 	def _lselect(self, lpath, ofs ):
 		#print lpath,self.name,ofs
 		if ofs>=len(lpath):
@@ -577,7 +594,7 @@ class SquashFsImage(_Squashfs_commons):
 		self.fragment_table = []
 		self.id_table = 0
 		self.inode_table_hash = {}
-		self.inode_table = ""
+		self.inode_table = str2byt("")
 		self.id_table = []
 		self.hash_table = {}
 		self.xattrs = ""
@@ -586,7 +603,7 @@ class SquashFsImage(_Squashfs_commons):
 		self.total_blocks = 0
 		self.total_files = 0
 		self.total_inodes = 0
-		self.directory_table = ''
+		self.directory_table = str2byt('')
 		self.inode_to_file = {}
 		self.root = SquashedFile("",None) 
 		self.image_file = None
@@ -648,7 +665,7 @@ class SquashFsImage(_Squashfs_commons):
 
 	def getFileContent(self,inode):
 		start = inode.start
-		content = ""
+		content = str2byt("")
 		block_list = self.read_block_list(inode)
 		for cur_blk in block_list :
 			if cur_blk == SQUASHFS_INVALID_FRAG:
@@ -661,7 +678,7 @@ class SquashFsImage(_Squashfs_commons):
 		if inode.frag_bytes !=0  :
 			start, size = self.read_fragment(inode.fragment)
 			buffer = self.read_data_block(self.image_file,start,size)
-			content+=buffer[inode.offset:inode.offset+inode.frag_bytes] # inode.frag_bytes was (inode.data%self.block_size)
+			content += buffer[inode.offset:inode.offset+inode.frag_bytes] # inode.frag_bytes was (inode.data%self.block_size)
 		return content
 
 	def read_block_list(self,inode):
@@ -707,7 +724,7 @@ class SquashFsImage(_Squashfs_commons):
 		myfile.seek(self.sBlk.fragment_table_start)
 		for i in range(0,indexes) :
 			fragment_table_index[i] = self.readLong(myfile)
-		table = ""
+		table = str2byt("")
 		for i in range(0,indexes): 
 			 block = self.read_block(myfile, fragment_table_index[i])[0]
 			 table += block
@@ -858,13 +875,13 @@ class SquashFsImage(_Squashfs_commons):
 		id_index_table = [ None for i in range(0,indexes) ]
 		self.id_table = [ None for i in range(0,self.sBlk.no_ids) ]
 		myfile.seek(self.sBlk.id_table_start,0)
-		for  i in range(0,self.sBlk.no_ids):
+		for  i in range(0,indexes):
 			id_index_table[i] = self.makeInteger(myfile,SQUASHFS_ID_BLOCK_BYTES(1))
 		for i in range(0,indexes) :
 			myfile.seek(id_index_table[i])
 			block,next,bytes = self.read_block(myfile, id_index_table[i])
 			offset = 0
-			index = i * (SQUASHFS_METADATA_SIZE/4)
+			index = i * (SQUASHFS_METADATA_SIZE // 4)
 			while offset<len(block):
 				self.id_table[index], offset = self.autoMakeBufInteger(block,offset,4)
 				index+=1
@@ -917,7 +934,7 @@ class SquashFsImage(_Squashfs_commons):
 			objtype     = dir_entry.type
 			parent      = dir_entry.s_file
 			mydir.cur_entry += 1
-			pathname = parent_name + '/' +name
+			pathname = str2byt(parent_name + '/') + name
 			if objtype == SQUASHFS_DIR_TYPE :
 				self.pre_scan(parent_name, start_block, offset, parent)
 			else:
@@ -940,11 +957,11 @@ if __name__=="__main__":
 		for i in range(2,len(sys.argv)):
 			sqashed_filename = sys.argv[i]
 			squashed_file = image.root.select(sqashed_filename)
-			print("--------------%-50.50s --------------"%sqashed_filename)
+			print("--------------%-50.50s --------------" % sqashed_filename)
 			if squashed_file==None:
 				print("NOT FOUND")
 			elif squashed_file.isFolder():
-				print("FOLDER "+squashed_file.getPath())
+				print("FOLDER " + squashed_file.getPath())
 				for child in squashed_file.children:
 					if child.isFolder():
 						print("\t%-20s <dir>" % child.name)
@@ -957,16 +974,16 @@ if __name__=="__main__":
 			nodetype = "FILE  "
 			if i.isFolder():
 				nodetype = "FOLDER"
-			print(nodetype +' '+ i.getPath() + " inode= " + i.inode.inode_number + "(" + image.read_block_list(i.inode) + "+" + i.inode.offset + ")")
+			print(nodetype + ' ' + i.getPath() + " inode=" + i.inode.inode_number + " (" + image.read_block_list(i.inode) + " + " + i.inode.offset + ")")
 			
 		for i in image.root.findAll() :
 			if i.name.endswith(".ini") :
 				content = i.getContent()
-				print("==============%-50.50s (%8d)==============" % (i.getPath(),len(content)))
+				print("==============%-50.50s (%8d)==============" % (i.getPath(), len(content)))
 				print(content)
-			elif i.name.endswith(".so") :	
+			elif i.name.endswith(".so") :
 				content = i.getContent()
-				print("++++++++++++++%-50.50s (%8d)++++++++++++++" % (i.getPath(),len(content)))
+				print("++++++++++++++%-50.50s (%8d)++++++++++++++" % (i.getPath(), len(content)))
 				oname = i.name+"_saved_"+str(i.inode.inode_number)
 				print("written %s from %s %d" % (oname, i.name, len(content)))
 				of = file( oname , "wb" )
