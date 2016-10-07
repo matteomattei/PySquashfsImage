@@ -27,6 +27,7 @@ ZLIB_COMPRESSION        = 1
 LZMA_COMPRESSION        = 2
 LZO_COMPRESSION         = 3
 XZ_COMPRESSION          = 4
+LZ4_COMPRESSION         = 5
 
 SQUASHFS_MAJOR          = 4
 SQUASHFS_MINOR          = 0
@@ -151,7 +152,16 @@ class _ZlibCompressor:
 		import zlib
 		return zlib.decompress(src)
 
-_compressors = ( _Compressor(), _ZlibCompressor() )
+class _XZCompressor:
+	def __init__(self):
+		self.supported = XZ_COMPRESSION
+		self.name="xz"
+		
+	def uncompress(self, src):
+		import lzma
+		return lzma.decompress(src)
+
+_compressors = ( _Compressor(), _ZlibCompressor(), _XZCompressor() )
 
 if sys.version_info[0] < 3: pyVersionTwo = True
 else: pyVersionTwo = False
