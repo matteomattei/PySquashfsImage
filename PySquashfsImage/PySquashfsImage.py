@@ -732,7 +732,7 @@ class SquashFsImage(_Squashfs_commons):
 		while ofs<len(table) :
 			entry = _Squashfs_fragment_entry()
 			ofs = entry.fill(table,ofs)
-			entry.fragment = self.read_block(myfile,entry.start_block) [0]
+			entry.fragment = self.read_data_block(myfile,entry.start_block,entry.size)
 			self.fragment_table.append(entry)
 			
 	def read_fragment(self,fragment):
