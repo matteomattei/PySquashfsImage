@@ -4,11 +4,11 @@ from setuptools import setup,find_packages
 
 setup(
 	name='PySquashfsImage',
-	version='0.3',
+	version='0.4',
 	description='Squashfs image parser',
 	long_description='This package provides a way to read and extract squashfs images.',
 	author='Matteo Mattei; Nicola Ponzeveroni;',
-	author_email='info@matteomattei.com; nicola.ponzeveroni@gilbarco.com;',
+	author_email='info@matteomattei.com',
 	url='https://github.com/matteomattei/PySquashfsImage',
 	packages=find_packages(),
 	keywords = ["filesystem", "parser", "squash", "squashfs"],
