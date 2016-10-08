@@ -593,7 +593,7 @@ class SquashedFile():
 		
 
 class SquashFsImage(_Squashfs_commons):
-	def __init__(self,filepath=None):
+	def __init__(self,filepath=None,offset=None):
 		self.comp = None
 		self.sBlk = _Squashfs_super_block()
 		self.fragment_buffer_size = FRAGMENT_BUFFER_DEFAULT
@@ -617,19 +617,21 @@ class SquashFsImage(_Squashfs_commons):
 		self.inode_to_file = {}
 		self.root = SquashedFile("",None) 
 		self.image_file = None
+		self.offset = int(offset) if offset else 0
 		if( filepath!=None ):
-			self.open(filepath);
+			self.open(filepath)
 
 	def getRoot(self):
 		return self.root
 
 	def setFile(self,fd):
 		self.image_file=fd
-		fd.seek(0)
+		fd.seek(self.offset)
 		self.initialize(self.image_file)
 
 	def open(self,filepath):
 		self.image_file = open(filepath,'rb')
+		self.image_file.seek(self.offset)
 		self.initialize(self.image_file)
 		
 	def close(self):
@@ -666,7 +668,7 @@ class SquashFsImage(_Squashfs_commons):
 
 	def read_data_block(self, myfile, start, size):
 		c_byte = SQUASHFS_COMPRESSED_SIZE_BLOCK(size)
-		myfile.seek(start)
+		myfile.seek(self.offset + start)
 		data = myfile.read(c_byte)
 		if(SQUASHFS_COMPRESSED_BLOCK(size)) :
 			return self.comp.uncompress(data)
@@ -700,19 +702,19 @@ class SquashFsImage(_Squashfs_commons):
 		return ret	
 
 	def read_block(self,myfile,start):
-		myfile.seek(start,0)
+		myfile.seek(self.offset + start,0)
 		c_byte = self.readShort(myfile)
 		offset = 2
 		if SQUASHFS_CHECK_DATA(self.sBlk.flags) :
 			offset = 3
 		if SQUASHFS_COMPRESSED(c_byte) : 
-			myfile.seek(start + offset)
+			myfile.seek(self.offset + start + offset)
 			c_byte = SQUASHFS_COMPRESSED_SIZE(c_byte)
 			buffer = myfile.read(c_byte)
 			block  = self.comp.uncompress(buffer)
 			return (block,start + offset + c_byte, c_byte)
 		else: 
-			myfile.seek(start + offset)
+			myfile.seek(self.offset + start + offset)
 			c_byte = SQUASHFS_COMPRESSED_SIZE(c_byte)
 			block  = myfile.read(c_byte)
 			return (block, start + offset + c_byte, c_byte)
@@ -731,7 +733,7 @@ class SquashFsImage(_Squashfs_commons):
 		self.fragment_table  = []
 		if self.sBlk.fragments == 0:
 			return True
-		myfile.seek(self.sBlk.fragment_table_start)
+		myfile.seek(self.offset + self.sBlk.fragment_table_start)
 		for i in range(0,indexes) :
 			fragment_table_index[i] = self.readLong(myfile)
 		table = str2byt("")
@@ -884,11 +886,11 @@ class SquashFsImage(_Squashfs_commons):
 		indexes = SQUASHFS_ID_BLOCKS(self.sBlk.no_ids)
 		id_index_table = [ None for i in range(0,indexes) ]
 		self.id_table = [ None for i in range(0,self.sBlk.no_ids) ]
-		myfile.seek(self.sBlk.id_table_start,0)
+		myfile.seek(self.offset + self.sBlk.id_table_start,0)
 		for  i in range(0,indexes):
 			id_index_table[i] = self.makeInteger(myfile,SQUASHFS_ID_BLOCK_BYTES(1))
 		for i in range(0,indexes) :
-			myfile.seek(id_index_table[i])
+			myfile.seek(self.offset + id_index_table[i])
 			block,next,bytes = self.read_block(myfile, id_index_table[i])
 			offset = 0
 			index = i * (SQUASHFS_METADATA_SIZE // 4)
@@ -900,7 +902,7 @@ class SquashFsImage(_Squashfs_commons):
 		id_table = _Xattr_table()
 		if self.sBlk.xattr_id_table_start == SQUASHFS_INVALID_BLK:
 			return SQUASHFS_INVALID_BLK
-		myfile.seek(self.sBlk.xattr_id_table_start)
+		myfile.seek(self.offset + self.sBlk.xattr_id_table_start)
 		id_table.read(myfile)
 		ids = id_table.xattr_ids
 		xattr_table_start = id_table.xattr_table_start
