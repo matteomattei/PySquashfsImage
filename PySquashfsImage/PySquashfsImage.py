@@ -411,7 +411,7 @@ class _Inode_header(_Squashfs_commons):
 		self.fragment,offset = self.autoMakeBufInteger(buff,offset,4)
 		self.offset,offset = self.autoMakeBufInteger(buff,offset,4)
 		self.xattr,offset = self.autoMakeBufInteger(buff,offset,4)
-		self.block_list[0],offset = self.autoMakeBufInteger(buff,offset,4)
+		self.block_list,offset = self.autoMakeBufInteger(buff,offset,4)
 		return offset
 
 	def dir_header (self,buff,offset):
@@ -490,9 +490,9 @@ class _Xattr_id(_Squashfs_commons): # 16
 		self.size = 0
 
 	def fill(self,buffer,ofs):
-		self.xattr,ofs=autoMakeBufInteger(buffer,ofs,8)
-		self.count,ofs=autoMakeBufInteger(buffer,ofs,4)
-		self.size,ofs=autoMakeBufInteger(buffer,ofs,4)
+		self.xattr,ofs=self.autoMakeBufInteger(buffer,ofs,8)
+		self.count,ofs=self.autoMakeBufInteger(buffer,ofs,4)
+		self.size,ofs=self.autoMakeBufInteger(buffer,ofs,4)
 
 class _Xattr_table(_Squashfs_commons):
 	def __init__(self):
@@ -607,7 +607,7 @@ class SquashFsImage(_Squashfs_commons):
 		self.inode_table = str2byt("")
 		self.id_table = []
 		self.hash_table = {}
-		self.xattrs = ""
+		self.xattrs = b""
 		self.directory_table_hash={}
 		self.created_inode = []
 		self.total_blocks = 0
@@ -910,7 +910,7 @@ class SquashFsImage(_Squashfs_commons):
 		indexes = SQUASHFS_XATTR_BLOCKS(ids)
 		index = []
 		for r in range(0,ids):
-			index.append( self.makeInt(myfile,SQUASHFS_XATTR_BLOCK_BYTES(1)) )
+			index.append( self.makeInteger(myfile,SQUASHFS_XATTR_BLOCK_BYTES(1)) )
 		bytes = SQUASHFS_XATTR_BYTES(ids)
 		xattr_ids = {}
 		for i in range(0,indexes):
@@ -931,7 +931,7 @@ class SquashFsImage(_Squashfs_commons):
 			self.hash_table[start]= (i * SQUASHFS_METADATA_SIZE)
 			block,start,byte_count = self.read_block(myfile,start)
 			for i in range(len(block),SQUASHFS_METADATA_SIZE):
-				block+='\x00'
+				block+=b'\x00'
 			self.xattrs += block	
 			i+=1
 		return ids
