@@ -158,8 +158,11 @@ class _XZCompressor:
 		self.name="xz"
 		
 	def uncompress(self, src):
-		import lzma
-		return lzma.decompress(src)
+            try:
+                import lzma
+            except ImportError:
+                from backports import lzma
+            return lzma.decompress(src)
 
 _compressors = ( _Compressor(), _ZlibCompressor(), _XZCompressor() )
 

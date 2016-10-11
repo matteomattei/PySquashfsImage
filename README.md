@@ -46,9 +46,9 @@ from PySquashfsImage import SquashFsImage
 
 image = SquashFsImage('/path/to/my/image.img')
 for i in image.root.findAll():
-    if i.getName() == 'myfilename':
-        with open('/tmp/'+i.getName(),'wb') as f:
-            print('Saving original '+i.getPath()+' in /tmp/'+i.getName()')
+    if i.getName() == b'myfilename':
+        with open(b'/tmp/'+i.getName(),'wb') as f:
+            print(b'Saving original '+i.getPath().encode()+b' in /tmp/'+i.getName())
             f.write(i.getContent())
 image.close()
 ```
