@@ -136,35 +136,46 @@ def byt2str(data):
 	return data
 
 class _Compressor:
-	def __init__(self):
-		self.supported = 0
-		self.name="none"
+    supported = 0
+    name = "none"
 
-	def uncompress(self, src):
-		return src
+    def uncompress(self, src):
+        return src
 
 class _ZlibCompressor:
-	def __init__(self):
-		self.supported = ZLIB_COMPRESSION
-		self.name="zlib"
-		
-	def uncompress(self, src):
-		import zlib
-		return zlib.decompress(src)
+    supported = ZLIB_COMPRESSION
+    name = "zlib"
+
+    def __init__(self):
+        self._lib = __import__('zlib')
+
+    def uncompress(self, src):
+        return self._lib.decompress(src)
 
 class _XZCompressor:
-	def __init__(self):
-		self.supported = XZ_COMPRESSION
-		self.name="xz"
-		
-	def uncompress(self, src):
-            try:
-                import lzma
-            except ImportError:
-                from backports import lzma
-            return lzma.decompress(src)
+    supported = XZ_COMPRESSION
+    name="xz"
 
-_compressors = ( _Compressor(), _ZlibCompressor(), _XZCompressor() )
+    def __init__(self):
+        try:
+            self._lib = __import__('lzma')
+        except ImportError:
+            self._lib = __import__('backports.lzma')
+
+    def uncompress(self, src):
+        return self._lib.decompress(src)
+
+class _LZ4Compressor:
+    supported = LZ4_COMPRESSION
+    name="lz4"
+
+    def __init__(self):
+        self._lib = __import__('lz4.frame')
+
+    def uncompress(self, src):
+        self._lib.decompress(src)
+
+_compressors = ( _Compressor, _ZlibCompressor, _XZCompressor, _LZ4Compressor )
 
 if sys.version_info[0] < 3: pyVersionTwo = True
 else: pyVersionTwo = False
@@ -649,8 +660,8 @@ class SquashFsImage(_Squashfs_commons):
 	def getCompressor(self,compression_id):
 		for c in _compressors :
 			if c.supported == compression_id :
-				return c
-		raise ValueError( "Unknown compression method "+compression_id )
+				return c()
+		raise ValueError("Unknown compression method %r" % compression_id)
 
 	def initialize(self,myfile):
 		self.__read_super(myfile)
