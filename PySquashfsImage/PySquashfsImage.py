@@ -592,10 +592,13 @@ class SquashedFile():
 			return False
 		return self.inode.hasAttribute(mask)
 		
-	def  isFolder(self):
+	def isFolder(self):
 		if self.parent==None : 
 			return True
-		return self.hasAttribute(stat.S_IFDIR)	
+		return self.hasAttribute(stat.S_IFDIR)
+
+	def isLink(self):
+		return self.hasAttribute(stat.S_IFLNK)
 		
 	def close(self):	
 		self.inode.image.close()
@@ -990,6 +993,8 @@ if __name__=="__main__":
 				for child in squashed_file.children:
 					if child.isFolder():
 						print("\t%-20s <dir>" % child.name)
+					elif child.isLink():
+						print("\t%-20s ->" % child.name)
 					else:
 						print("\t%-20s %s" % (child.name,child.inode.data))
 			else:  
