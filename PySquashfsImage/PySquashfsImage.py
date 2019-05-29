@@ -12,6 +12,10 @@ Nicola Ponzeveroni <nicola.ponzeveroni@gilbarco.com>
 It is intended to be used to access files into a SQUASHFS 4.0 image file.
 
 Based on Phillip Lougher <phillip@lougher.demon.co.uk> Unsquash tool
+
+https://github.com/matteomattei/PySquashfsImage
+http://squashfs.sourceforge.net/
+
 """
 __all__ = ['SquashFsImage','SquashedFile','SquashInode']
 
