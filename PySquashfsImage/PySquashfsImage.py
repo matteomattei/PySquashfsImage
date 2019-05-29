@@ -599,15 +599,20 @@ class SquashedFile():
 
 	def isLink(self):
 		return self.hasAttribute(stat.S_IFLNK)
-		
+
 	def close(self):	
 		self.inode.image.close()
+
 	def getLength(self):
 		return self.inode.data
-		
+
 	def getName(self):
 		return self.name
-		
+
+	def getLink(self):
+		if self.inode==None:
+			return None
+		return self.inode.symlink
 
 class SquashFsImage(_Squashfs_commons):
 	def __init__(self,filepath=None,offset=None):
@@ -829,7 +834,7 @@ class SquashFsImage(_Squashfs_commons):
 			i.xattr = header.xattr
 		elif header.inode_type==SQUASHFS_SYMLINK_TYPE or header.inode_type==SQUASHFS_LSYMLINK_TYPE: 
 			header.symlink_header(self.inode_table,block_ptr)
-			i.symlink = self.inode_table[block_ptr+24:block_ptr+24+header.symlink_size+1] + b'\0'
+			i.symlink = self.inode_table[block_ptr+24:block_ptr+24+header.symlink_size] + b'\0'
 			i.data = header.symlink_size
 			if header.inode_type == SQUASHFS_LSYMLINK_TYPE:
 				i.xattr = self.makeBufInteger(self.inode_table,block_ptr + 24 + header.symlink_size, 4)
@@ -992,11 +997,11 @@ if __name__=="__main__":
 				print("FOLDER " + squashed_file.getPath())
 				for child in squashed_file.children:
 					if child.isFolder():
-						print("\t%-20s <dir>" % child.name)
+						print("\t%-60s  <dir> " % child.name)
 					elif child.isLink():
-						print("\t%-20s ->" % child.name)
+						print("\t%s -> %s" % (child.name,child.getLink()))
 					else:
-						print("\t%-20s %s" % (child.name,child.inode.data))
+						print("\t%-60s %8d" % (child.name,child.inode.data))
 			else:  
 				print(squashed_file.getContent())
 	else:
