@@ -923,7 +923,7 @@ class SquashFsImage(_Squashfs_commons):
 		index_bytes = SQUASHFS_XATTR_BLOCK_BYTES(ids)
 		indexes = SQUASHFS_XATTR_BLOCKS(ids)
 		index = []
-		for r in range(0,ids):
+		for r in range(0,indexes):
 			index.append( self.makeInteger(myfile,SQUASHFS_XATTR_BLOCK_BYTES(1)) )
 		bytes = SQUASHFS_XATTR_BYTES(ids)
 		xattr_ids = {}
