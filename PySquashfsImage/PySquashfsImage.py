@@ -834,7 +834,7 @@ class SquashFsImage(_Squashfs_commons):
 			i.xattr = header.xattr
 		elif header.inode_type==SQUASHFS_SYMLINK_TYPE or header.inode_type==SQUASHFS_LSYMLINK_TYPE: 
 			header.symlink_header(self.inode_table,block_ptr)
-			i.symlink = self.inode_table[block_ptr+24:block_ptr+24+header.symlink_size] + b'\0'
+			i.symlink = byt2str(self.inode_table[block_ptr+24:block_ptr+24+header.symlink_size])
 			i.data = header.symlink_size
 			if header.inode_type == SQUASHFS_LSYMLINK_TYPE:
 				i.xattr = self.makeBufInteger(self.inode_table,block_ptr + 24 + header.symlink_size, 4)
