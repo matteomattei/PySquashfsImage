@@ -826,8 +826,7 @@ class SquashFsImage(_Squashfs_commons):
 			i.xattr = header.xattr
 		elif header.inode_type==SQUASHFS_SYMLINK_TYPE or header.inode_type==SQUASHFS_LSYMLINK_TYPE: 
 			header.symlink_header(self.inode_table,block_ptr)
-			i.symlink = self.inode_table[block_ptr+24:block_ptr+24+header.symlink_size+1]
-			i.symlink[header.symlink_size] = '\0'
+			i.symlink = self.inode_table[block_ptr+24:block_ptr+24+header.symlink_size+1] + b'\0'
 			i.data = header.symlink_size
 			if header.inode_type == SQUASHFS_LSYMLINK_TYPE:
 				i.xattr = self.makeBufInteger(self.inode_table,block_ptr + 24 + header.symlink_size, 4)
@@ -964,7 +963,7 @@ class SquashFsImage(_Squashfs_commons):
 			if objtype == SQUASHFS_DIR_TYPE :
 				self.pre_scan(parent_name, start_block, offset, parent)
 			else:
-				if objtype == SQUASHFS_FILE_TYPE or objtype == SQUASHFS_LREG_TYPE :
+				if objtype in [SQUASHFS_FILE_TYPE, SQUASHFS_LREG_TYPE, SQUASHFS_SYMLINK_TYPE, SQUASHFS_LSYMLINK_TYPE]:
 					i = self.read_inode(start_block, offset)
 					if self.created_inode[i.inode_number - 1] == None :
 						self.created_inode[i.inode_number - 1] = i
