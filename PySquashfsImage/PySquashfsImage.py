@@ -560,17 +560,18 @@ class SquashedFile():
 	def select(self,path):
 		if path == str2byt("/"):
 			path = str2byt("")
-		lpath = path.split("/")
+		lpath = [ str2byt(i) for i in path.split('/') ]
+		print(lpath)
 		start = self
 		ofs = 0
-		if  lpath[0] == str2byt(""):
+		if not lpath[0]:
 			ofs = 1
-			while start.parent!=None:
+			while start.parent:
 				start = start.parent
 		if ofs>=len(lpath):
 			return start
 		for child in start.children :
-			if child.name == lpath[ofs] :
+			if child.name == lpath[ofs]:
 				return child._lselect( lpath, ofs + 1 )
 		return None
 
