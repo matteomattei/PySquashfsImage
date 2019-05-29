@@ -183,12 +183,19 @@ else: pyVersionTwo = False
 class _Squashfs_commons():
 	def makeInteger(self,myfile,length):
 		""" Assemble multibyte integer """
-		ret = 0
-		pwr = 1
-		for i in range(0,length):
-			ret += ((ord(myfile.read(1))&0xFF)*pwr)
-			pwr *= 0x100
-		return ret
+		return self.makeBufInteger(myfile.read(length), 0, length)
+
+	def makeBufInteger(self,buf,start,length):
+		""" Assemble multibyte integer """
+		if pyVersionTwo:
+			ret = 0
+			pwr = 1
+			for i in range(start,start+lenght):
+				ret += ((ord(buf[i])&0xFF)*pwr)
+				pwr *= 0x100
+			return ret
+		else:
+			return int.from_bytes(buf[start:start+length], byteorder='little')
 
 	def readShort(self,myfile):
 		return self.makeInteger(myfile,2)
@@ -199,17 +206,6 @@ class _Squashfs_commons():
 	def readLong(self,myfile):
 		return self.makeInteger(myfile,8)
 		
-	def makeBufInteger(self,buf,start,lenght):
-		""" Assemble multibyte integer """
-		ret = 0
-		pwr = 1
-		for i in range(start,start+lenght):
-			if pyVersionTwo:
-				ret += ((ord(buf[i])&0xFF)*pwr)
-			else:
-				ret += ((int(buf[i])&0xFF)*pwr)
-			pwr *= 0x100
-		return ret
 		
 	def autoMakeBufInteger(self,buf,start,length):
 		""" Assemble multibyte integer """
