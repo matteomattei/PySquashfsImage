@@ -190,7 +190,7 @@ class _Squashfs_commons():
 		if pyVersionTwo:
 			ret = 0
 			pwr = 1
-			for i in range(start,start+lenght):
+			for i in range(start,start+length):
 				ret += ((ord(buf[i])&0xFF)*pwr)
 				pwr *= 0x100
 			return ret
@@ -560,17 +560,17 @@ class SquashedFile():
 	def select(self,path):
 		if path == str2byt("/"):
 			path = str2byt("")
-		lpath = path.split(str2byt("/"))
+		lpath = [ str2byt(i) for i in path.split('/') ]
 		start = self
 		ofs = 0
-		if  lpath[0] == str2byt(""):
+		if not lpath[0]:
 			ofs = 1
-			while start.parent!=None:
+			while start.parent:
 				start = start.parent
 		if ofs>=len(lpath):
 			return start
 		for child in start.children :
-			if child.name == lpath[ofs] :
+			if child.name == lpath[ofs]:
 				return child._lselect( lpath, ofs + 1 )
 		return None
 
@@ -609,6 +609,29 @@ class SquashedFile():
 		if self.inode==None:
 			return None
 		return self.inode.symlink
+
+	def getMode(self):
+		ret = ['-'] * 10
+		if self.inode!=None:
+			if stat.S_IFMT(self.inode.mode) == stat.S_IFSOCK: ret[0] = 's'
+			if stat.S_IFMT(self.inode.mode) == stat.S_IFLNK:  ret[0] = 'l'
+			if stat.S_IFMT(self.inode.mode) == stat.S_IFBLK:  ret[0] = 'b'
+			if stat.S_IFMT(self.inode.mode) == stat.S_IFDIR:  ret[0] = 'd'
+			if stat.S_IFMT(self.inode.mode) == stat.S_IFCHR:  ret[0] = 'c'
+			if stat.S_IFMT(self.inode.mode) == stat.S_IFIFO:  ret[0] = 'p'
+
+			if (self.inode.mode & stat.S_IRUSR) == stat.S_IRUSR: ret[1] = 'r'
+			if (self.inode.mode & stat.S_IWUSR) == stat.S_IWUSR: ret[2] = 'w'
+			if (self.inode.mode & stat.S_IRGRP) == stat.S_IRGRP: ret[4] = 'r'
+			if (self.inode.mode & stat.S_IWGRP) == stat.S_IWGRP: ret[5] = 'w'
+			if (self.inode.mode & stat.S_IROTH) == stat.S_IROTH: ret[7] = 'r'
+			if (self.inode.mode & stat.S_IWOTH) == stat.S_IWOTH: ret[8] = 'w'
+
+			if (self.inode.mode & stat.S_IXUSR) == stat.S_IXUSR: ret[3] = 'x'
+			if (self.inode.mode & stat.S_IXGRP) == stat.S_IXGRP: ret[6] = 'x'
+			if (self.inode.mode & stat.S_IXOTH) == stat.S_IXOTH: ret[9] = 'x'
+
+		return ''.join(ret)
 
 class SquashFsImage(_Squashfs_commons):
 	def __init__(self,filepath=None,offset=None):
@@ -993,11 +1016,11 @@ if __name__=="__main__":
 				print("FOLDER " + squashed_file.getPath())
 				for child in squashed_file.children:
 					if child.isFolder():
-						print("\t%-60s  <dir> " % child.name)
+						print("\t%s %-60s  <dir> " % (child.getMode(),child.name))
 					elif child.isLink():
-						print("\t%s -> %s" % (child.name,child.getLink()))
+						print("\t%s %s -> %s" % (child.getMode(),child.name,child.getLink()))
 					else:
-						print("\t%-60s %8d" % (child.name,child.inode.data))
+						print("\t%s %-60s %8d" % (child.getMode(),child.name,child.inode.data))
 			else:  
 				print(squashed_file.getContent())
 	else:
