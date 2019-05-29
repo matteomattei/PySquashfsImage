@@ -561,7 +561,6 @@ class SquashedFile():
 		if path == str2byt("/"):
 			path = str2byt("")
 		lpath = [ str2byt(i) for i in path.split('/') ]
-		print(lpath)
 		start = self
 		ofs = 0
 		if not lpath[0]:
