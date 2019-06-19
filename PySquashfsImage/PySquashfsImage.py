@@ -631,9 +631,16 @@ class SquashedFile():
 			if (self.inode.mode & stat.S_IROTH) == stat.S_IROTH: ret[7] = 'r'
 			if (self.inode.mode & stat.S_IWOTH) == stat.S_IWOTH: ret[8] = 'w'
 
-			if (self.inode.mode & stat.S_IXUSR) == stat.S_IXUSR: ret[3] = 'x'
-			if (self.inode.mode & stat.S_IXGRP) == stat.S_IXGRP: ret[6] = 'x'
-			if (self.inode.mode & stat.S_IXOTH) == stat.S_IXOTH: ret[9] = 'x'
+			if (self.inode.mode & stat.S_IXUSR) == stat.S_IXUSR:
+				ret[3] = 'x'
+				if (self.inode.mode & stat.S_ISUID) == stat.S_ISUID:
+					ret[3] = 's'
+			if (self.inode.mode & stat.S_IXGRP) == stat.S_IXGRP:
+				ret[6] = 'x'
+				if (self.inode.mode & stat.S_ISGID) == stat.S_ISGID:
+					ret[6] = 's'
+			if (self.inode.mode & stat.S_IXOTH) == stat.S_IXOTH:
+				ret[9] = 'x'
 
 		return ''.join(ret)
 
