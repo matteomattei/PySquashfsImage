@@ -425,7 +425,7 @@ class _Inode_header(_Squashfs_commons):
 		self.fragment,offset = self.autoMakeBufInteger(buff,offset,4)
 		self.offset,offset = self.autoMakeBufInteger(buff,offset,4)
 		self.xattr,offset = self.autoMakeBufInteger(buff,offset,4)
-		self.block_list,offset = self.autoMakeBufInteger(buff,offset,4)
+		self.block_list=buff[offset:]
 		return offset
 
 	def dir_header (self,buff,offset):
