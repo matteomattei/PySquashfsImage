@@ -294,6 +294,9 @@ class SquashInode:
 		self.sparse = 0
 		self.xattr = 0
 		
+	def getXattr(self):
+		return self.xattr
+
 	def getContent(self):
 		return self.image.getFileContent(self)
 	
@@ -532,6 +535,9 @@ class SquashedFile():
 		else:
 			return self.parent.getPath() + "/" + byt2str(self.name)
 			
+	def getXattr(self):
+		return self.inode.getXattr()
+
 	def findAll(self):
 		ret = [ self ]
 		for i in self.children :
