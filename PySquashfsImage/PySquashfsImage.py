@@ -181,7 +181,7 @@ class _ZSTDCompressor:
     name="zstd"
 
     def __init__(self):
-	# https://pypi.org/project/zstandard/
+        # https://pypi.org/project/zstandard/
         self._lib = __import__('zstandard')
 
     def uncompress(self, src):
