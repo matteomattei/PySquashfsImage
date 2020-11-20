@@ -27,6 +27,7 @@ SQUASHFS_CHECK = 2
 SQUASHFS_UIDS           = 256
 SQUASHFS_GUIDS          = 255
 
+NO_COMPRESSION          = 0
 ZLIB_COMPRESSION        = 1
 LZMA_COMPRESSION        = 2
 LZO_COMPRESSION         = 3
@@ -141,14 +142,12 @@ def byt2str(data):
 	return data
 
 class _Compressor:
-    supported = 0
     name = "none"
 
     def uncompress(self, src):
         return src
 
 class _ZlibCompressor:
-    supported = ZLIB_COMPRESSION
     name = "zlib"
 
     def __init__(self):
@@ -158,7 +157,6 @@ class _ZlibCompressor:
         return self._lib.decompress(src)
 
 class _XZCompressor:
-    supported = XZ_COMPRESSION
     name="xz"
 
     def __init__(self):
@@ -171,7 +169,6 @@ class _XZCompressor:
         return self._lib.decompress(src)
 
 class _LZ4Compressor:
-    supported = LZ4_COMPRESSION
     name="lz4"
 
     def __init__(self):
@@ -181,20 +178,22 @@ class _LZ4Compressor:
         self._lib.decompress(src)
 
 class _ZSTDCompressor:
-    supported = ZSTD_COMPRESSION
     name="zstd"
 
     def __init__(self):
+		# https://pypi.org/project/zstandard/
         self._lib = __import__('zstandard')
 
     def uncompress(self, src):
         return self._lib.ZstdDecompressor().decompress(src)
 
-_compressors = (_Compressor,
-                _ZlibCompressor,
-                _XZCompressor,
-                _LZ4Compressor,
-                _ZSTDCompressor)
+_compressors = {
+	NO_COMPRESSION: _Compressor,
+	ZLIB_COMPRESSION: _ZlibCompressor,
+	XZ_COMPRESSION: _XZCompressor,
+	LZ4_COMPRESSION: _LZ4Compressor,
+	ZSTD_COMPRESSION: _ZSTDCompressor
+}
 
 if sys.version_info[0] < 3: pyVersionTwo = True
 else: pyVersionTwo = False
@@ -716,11 +715,10 @@ class SquashFsImage(_Squashfs_commons):
 			raise IOError("The file supplied is not a squashfs 4.0 image")
 		self.comp = self.getCompressor(self.sBlk.compression)
 
-	def getCompressor(self,compression_id):
-		for c in _compressors :
-			if c.supported == compression_id :
-				return c()
-		raise ValueError("Unknown compression method %r" % compression_id)
+	def getCompressor(self, compression_id):
+		if compression_id not in _compressors:
+			raise ValueError("Unknown compression method %r" % compression_id)
+		return _compressors[compression_id]()
 
 	def initialize(self,myfile):
 		self.__read_super(myfile)
