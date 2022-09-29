@@ -735,7 +735,7 @@ class SquashFsImage(_Squashfs_commons):
 		self.read_xattrs_from_disk(myfile)
 		root_block = SQUASHFS_INODE_BLK   (self.sBlk.root_inode)
 		root_offs  = SQUASHFS_INODE_OFFSET(self.sBlk.root_inode)
-		self.pre_scan("squashfs-root",root_block,root_offs, self.root)
+		self.pre_scan(b"squashfs-root",root_block,root_offs, self.root)
 
 	def read_data_block(self, myfile, start, size):
 		c_byte = SQUASHFS_COMPRESSED_SIZE_BLOCK(size)
@@ -1016,9 +1016,9 @@ class SquashFsImage(_Squashfs_commons):
 			objtype     = dir_entry.type
 			parent      = dir_entry.s_file
 			mydir.cur_entry += 1
-			pathname = str2byt(parent_name + '/') + name
+			pathname = parent_name + b'/' + name
 			if objtype == SQUASHFS_DIR_TYPE :
-				self.pre_scan(parent_name, start_block, offset, parent)
+				self.pre_scan(pathname, start_block, offset, parent)
 			else:
 				if objtype in [SQUASHFS_FILE_TYPE, SQUASHFS_LREG_TYPE, SQUASHFS_SYMLINK_TYPE, SQUASHFS_LSYMLINK_TYPE]:
 					i = self.read_inode(start_block, offset)
