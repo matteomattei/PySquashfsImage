@@ -390,11 +390,6 @@ class _Squashfs_fragment_entry(_Squashfs_commons):
         self.unused = 0
         self.fragment = None
 
-    def read(self, myfile):
-        self.start_block = self.readLong(myfile)
-        self.size = self.readInt(myfile)
-        self.unused = self.readInt(myfile)
-
     def fill(self, block, ofs):
         self.start_block, ofs = self.autoMakeBufInteger(block, ofs, 8)
         self.size, ofs = self.autoMakeBufInteger(block, ofs, 4)
@@ -865,7 +860,7 @@ class SquashFsImage(_Squashfs_commons):
 
     def initialize(self, myfile):
         self.__read_super(myfile)
-        self.created_inode = [None for i in range(0, self.sBlk.inodes)]
+        self.created_inode = [None for _ in range(0, self.sBlk.inodes)]
         self.block_size = self.sBlk.block_size
         self.block_log = self.sBlk.block_log
         self.fragment_buffer_size <<= 20 - self.block_log
@@ -911,7 +906,7 @@ class SquashFsImage(_Squashfs_commons):
     def read_block_list(self, inode):
         ret = []
         ofs = inode.block_ptr
-        for i in range(0, inode.blocks):
+        for _ in range(0, inode.blocks):
             number, ofs = self.autoMakeBufInteger(self.inode_table, ofs, 4)
             ret.append(number)
         return ret
@@ -938,13 +933,13 @@ class SquashFsImage(_Squashfs_commons):
         bytes_ = 0
         while start < end:
             self.inode_table_hash[start] = bytes_
-            block, start, res = self.read_block(myfile, start)
+            block, start, _ = self.read_block(myfile, start)
             self.inode_table += block
             bytes_ = len(self.inode_table)
 
     def read_fragment_table(self, myfile):
         indexes = SQUASHFS_FRAGMENT_INDEXES(self.sBlk.fragments)
-        fragment_table_index = [None for i in range(0, indexes)]
+        fragment_table_index = [None for _ in range(0, indexes)]
         self.fragment_table = []
         if self.sBlk.fragments == 0:
             return True
@@ -1053,10 +1048,9 @@ class SquashFsImage(_Squashfs_commons):
         return i
 
     def uncompress_directory_table(self, myfile, start, end):
-        size = 0
         while start < end:
             self.directory_table_hash[start] = len(self.directory_table)
-            block, start, byte_count = self.read_block(myfile, start)
+            block, start, _ = self.read_block(myfile, start)
             self.directory_table += block
 
     def squashfs_opendir(self, block_start, offset, s_file):
@@ -1098,14 +1092,14 @@ class SquashFsImage(_Squashfs_commons):
 
     def read_uids_guids(self, myfile):
         indexes = SQUASHFS_ID_BLOCKS(self.sBlk.no_ids)
-        id_index_table = [None for i in range(0, indexes)]
-        self.id_table = [None for i in range(0, self.sBlk.no_ids)]
+        id_index_table = [None for _ in range(0, indexes)]
+        self.id_table = [None for _ in range(0, self.sBlk.no_ids)]
         myfile.seek(self.offset + self.sBlk.id_table_start, 0)
         for i in range(0, indexes):
             id_index_table[i] = self.makeInteger(myfile, SQUASHFS_ID_BLOCK_BYTES(1))
         for i in range(0, indexes):
             myfile.seek(self.offset + id_index_table[i])
-            block, next, bytes_ = self.read_block(myfile, id_index_table[i])
+            block = self.read_block(myfile, id_index_table[i])[0]
             offset = 0
             index = i * (SQUASHFS_METADATA_SIZE // 4)
             while offset < len(block):
@@ -1120,15 +1114,13 @@ class SquashFsImage(_Squashfs_commons):
         id_table.read(myfile)
         ids = id_table.xattr_ids
         xattr_table_start = id_table.xattr_table_start
-        index_bytes = SQUASHFS_XATTR_BLOCK_BYTES(ids)
         indexes = SQUASHFS_XATTR_BLOCKS(ids)
         index = []
-        for r in range(0, indexes):
+        for _ in range(0, indexes):
             index.append(self.makeInteger(myfile, SQUASHFS_XATTR_BLOCK_BYTES(1)))
-        bytes_ = SQUASHFS_XATTR_BYTES(ids)
         xattr_ids = {}
         for i in range(0, indexes):
-            block, next, byte_count = self.read_block(myfile, index[i])
+            block = self.read_block(myfile, index[i])[0]
             cur_idx = (i * SQUASHFS_METADATA_SIZE) / 16
             ofs = 0
             while ofs < len(block):
@@ -1139,11 +1131,10 @@ class SquashFsImage(_Squashfs_commons):
                 ofs += 16
         start = xattr_table_start
         end = index[0]
-        xattr_values = {}
         i = 0
         while start < end:
             self.hash_table[start] = i * SQUASHFS_METADATA_SIZE
-            block, start, byte_count = self.read_block(myfile, start)
+            block, start, _ = self.read_block(myfile, start)
             for i in range(len(block), SQUASHFS_METADATA_SIZE):
                 block += b'\x00'
             self.xattrs += block
@@ -1154,13 +1145,11 @@ class SquashFsImage(_Squashfs_commons):
         mydir, i = self.squashfs_opendir(start_block, offset, parent)
         while mydir.cur_entry < mydir.dir_count:
             dir_entry = mydir.dirs[mydir.cur_entry]
-            name = dir_entry.name
             start_block = dir_entry.start_block
             offset = dir_entry.offset
             objtype = dir_entry.type
             parent = dir_entry.s_file
             mydir.cur_entry += 1
-            pathname = str2byt(parent_name + '/') + name
             if objtype == SQUASHFS_DIR_TYPE:
                 self.pre_scan(parent_name, start_block, offset, parent)
             else:
