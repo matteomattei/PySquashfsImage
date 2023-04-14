@@ -19,6 +19,7 @@ http://squashfs.sourceforge.net/
 """
 __all__ = ['SquashFsImage', 'SquashedFile', 'SquashInode']
 
+import struct
 import sys
 import stat
 
@@ -247,7 +248,7 @@ class _Compressor:
         return src
 
 
-class _ZlibCompressor:
+class _ZlibCompressor(_Compressor):
     name = "zlib"
 
     def __init__(self):
@@ -257,7 +258,7 @@ class _ZlibCompressor:
         return self._lib.decompress(src)
 
 
-class _XZCompressor:
+class _XZCompressor(_Compressor):
     name = "xz"
 
     def __init__(self):
@@ -270,7 +271,7 @@ class _XZCompressor:
         return self._lib.decompress(src)
 
 
-class _LZ4Compressor:
+class _LZ4Compressor(_Compressor):
     name = "lz4"
 
     def __init__(self):
@@ -280,7 +281,7 @@ class _LZ4Compressor:
         self._lib.decompress(src)
 
 
-class _ZSTDCompressor:
+class _ZSTDCompressor(_Compressor):
     name = "zstd"
 
     def __init__(self):
@@ -320,21 +321,43 @@ class _Squashfs_commons:
         else:
             return int.from_bytes(buf[start : start + length], byteorder='little')
 
-    def readShort(self, myfile):
-        return self.makeInteger(myfile, 2)
+    def _read_integer(self, myfile, fmt):
+        return struct.unpack(fmt, myfile.read(struct.calcsize(fmt)))[0]
 
-    def readInt(self, myfile):
-        return self.makeInteger(myfile, 4)
+    def readShort(self, myfile):
+        return self._read_integer(myfile, "<H")
 
     def readLong(self, myfile):
-        return self.makeInteger(myfile, 8)
+        return self._read_integer(myfile, "<Q")
 
     def autoMakeBufInteger(self, buf, start, length):
         """Assemble multibyte integer."""
         return (self.makeBufInteger(buf, start, length), start + length)
 
+    def read(self, myfile):
+        """Set values read from a file object."""
+        values = struct.unpack(self.FORMAT, myfile.read(self.SIZE))
+        for field, value in zip(self.FIELDS, values):
+            setattr(self, field, value)
+
+    def fill(self, buffer, ofs):
+        """Set values read from a buffer. Return the amount of bytes read."""
+        values = struct.unpack(self.FORMAT, buffer[ofs : ofs + self.SIZE])
+        for field, value in zip(self.FIELDS, values):
+            setattr(self, field, value)
+        return self.SIZE
+
 
 class _Squashfs_super_block(_Squashfs_commons):
+
+    FORMAT = "<IIIIIHHHHHHQQQQQQQQ"
+    SIZE = struct.calcsize(FORMAT)
+    FIELDS = [
+        "s_magic", "inodes", "mkfs_time", "block_size", "fragments", "compression",
+        "block_log", "flags", "no_ids", "s_major", "s_minor", "root_inode",
+        "bytes_used", "id_table_start", "xattr_id_table_start", "inode_table_start",
+        "directory_table_start", "fragment_table_start", "lookup_table_start"
+    ]
 
     def __init__(self):
         self.s_magic = 0
@@ -357,29 +380,12 @@ class _Squashfs_super_block(_Squashfs_commons):
         self.fragment_table_start = 0
         self.lookup_table_start = 0
 
-    def read(self, myfile):
-        self.s_magic = self.readInt(myfile)
-        self.inodes = self.readInt(myfile)
-        self.mkfs_time = self.readInt(myfile)
-        self.block_size = self.readInt(myfile)
-        self.fragments = self.readInt(myfile)
-        self.compression = self.readShort(myfile)
-        self.block_log = self.readShort(myfile)
-        self.flags = self.readShort(myfile)
-        self.no_ids = self.readShort(myfile)
-        self.s_major = self.readShort(myfile)
-        self.s_minor = self.readShort(myfile)
-        self.root_inode = self.readLong(myfile)
-        self.bytes_used = self.readLong(myfile)
-        self.id_table_start = self.readLong(myfile)
-        self.xattr_id_table_start = self.readLong(myfile)
-        self.inode_table_start = self.readLong(myfile)
-        self.directory_table_start = self.readLong(myfile)
-        self.fragment_table_start = self.readLong(myfile)
-        self.lookup_table_start = self.readLong(myfile)
-
 
 class _Squashfs_fragment_entry(_Squashfs_commons):
+
+    FORMAT = "<QII"
+    SIZE = struct.calcsize(FORMAT)
+    FIELDS = ["start_block", "size", "unused"]
 
     def __init__(self):
         self.start_block = 0
@@ -387,11 +393,8 @@ class _Squashfs_fragment_entry(_Squashfs_commons):
         self.unused = 0
         self.fragment = None
 
-    def fill(self, block, ofs):
-        self.start_block, ofs = self.autoMakeBufInteger(block, ofs, 8)
-        self.size, ofs = self.autoMakeBufInteger(block, ofs, 4)
-        self.unused, ofs = self.autoMakeBufInteger(block, ofs, 4)
-        return ofs
+    def fill(self, buffer, ofs):
+        return ofs + super().fill(buffer, ofs)
 
 
 class SquashInode:
@@ -427,6 +430,9 @@ class SquashInode:
 
 class _Inode_header(_Squashfs_commons):
 
+    BASE_FORMAT = "<HHHHII"
+    BASE_FIELDS = ["inode_type", "mode", "uid", "guid", "mtime", "inode_number"]
+
     def __init__(self):
         self.inode_type = 0
         self.mode = 0
@@ -458,135 +464,74 @@ class _Inode_header(_Squashfs_commons):
         self.sparse = 0
         self.index = []
 
+    def _set_values(self, fmt, fields, buff, offset):
+        """Return the amount of bytes read from the buffer."""
+        size = struct.calcsize(fmt)
+        values = struct.unpack(fmt, buff[offset : offset + size])
+        for field, value in zip(fields, values):
+            setattr(self, field, value)
+        return size
+
     def base_header(self, buff, offset):
-        self.inode_type, offset = self.autoMakeBufInteger(buff, offset, 2)
-        self.mode, offset = self.autoMakeBufInteger(buff, offset, 2)
-        self.uid, offset = self.autoMakeBufInteger(buff, offset, 2)
-        self.guid, offset = self.autoMakeBufInteger(buff, offset, 2)
-        self.mtime, offset = self.autoMakeBufInteger(buff, offset, 4)
-        self.inode_number, offset = self.autoMakeBufInteger(buff, offset, 4)
-        return offset
+        return self._set_values(self.BASE_FORMAT, self.BASE_FIELDS, buff, offset)
 
     def ipc_header(self, buff, offset):
-        self.inode_type, offset = self.autoMakeBufInteger(buff, offset, 2)
-        self.mode, offset = self.autoMakeBufInteger(buff, offset, 2)
-        self.uid, offset = self.autoMakeBufInteger(buff, offset, 2)
-        self.guid, offset = self.autoMakeBufInteger(buff, offset, 2)
-        self.mtime, offset = self.autoMakeBufInteger(buff, offset, 4)
-        self.inode_number, offset = self.autoMakeBufInteger(buff, offset, 4)
-        self.nlink, offset = self.autoMakeBufInteger(buff, offset, 4)
-        return offset
+        offset += self.base_header(buff, offset)
+        self._set_values('<I', ["nlink"], buff, offset)
 
     def lipc_header(self, buff, offset):
-        self.inode_type, offset = self.autoMakeBufInteger(buff, offset, 2)
-        self.mode, offset = self.autoMakeBufInteger(buff, offset, 2)
-        self.uid, offset = self.autoMakeBufInteger(buff, offset, 2)
-        self.guid, offset = self.autoMakeBufInteger(buff, offset, 2)
-        self.mtime, offset = self.autoMakeBufInteger(buff, offset, 4)
-        self.inode_number, offset = self.autoMakeBufInteger(buff, offset, 4)
-        self.nlink, offset = self.autoMakeBufInteger(buff, offset, 4)
-        self.xattr, offset = self.autoMakeBufInteger(buff, offset, 4)
-        return offset
+        offset += self.base_header(buff, offset)
+        self._set_values("<II", ["nlink", "xattr"], buff, offset)
 
     def dev_header(self, buff, offset):
-        self.inode_type, offset = self.autoMakeBufInteger(buff, offset, 2)
-        self.mode, offset = self.autoMakeBufInteger(buff, offset, 2)
-        self.uid, offset = self.autoMakeBufInteger(buff, offset, 2)
-        self.guid, offset = self.autoMakeBufInteger(buff, offset, 2)
-        self.mtime, offset = self.autoMakeBufInteger(buff, offset, 4)
-        self.inode_number, offset = self.autoMakeBufInteger(buff, offset, 4)
-        self.nlink, offset = self.autoMakeBufInteger(buff, offset, 4)
-        self.rdev, offset = self.autoMakeBufInteger(buff, offset, 4)
-        return offset
+        offset += self.base_header(buff, offset)
+        self._set_values("<II", ["nlink", "rdev"], buff, offset)
 
     def ldev_header(self, buff, offset):
-        self.inode_type, offset = self.autoMakeBufInteger(buff, offset, 2)
-        self.mode, offset = self.autoMakeBufInteger(buff, offset, 2)
-        self.uid, offset = self.autoMakeBufInteger(buff, offset, 2)
-        self.guid, offset = self.autoMakeBufInteger(buff, offset, 2)
-        self.mtime, offset = self.autoMakeBufInteger(buff, offset, 2)
-        self.inode_number, offset = self.autoMakeBufInteger(buff, offset, 2)
-        self.nlink, offset = self.autoMakeBufInteger(buff, offset, 2)
-        self.rdev, offset = self.autoMakeBufInteger(buff, offset, 2)
-        self.xattr, offset = self.autoMakeBufInteger(buff, offset, 2)
-        return offset
+        offset += self.base_header(buff, offset)
+        self._set_values("<III", ["nlink", "rdev", "xattr"], buff, offset)
 
     def symlink_header(self, buff, offset):
-        self.inode_type, offset = self.autoMakeBufInteger(buff, offset, 2)
-        self.mode, offset = self.autoMakeBufInteger(buff, offset, 2)
-        self.uid, offset = self.autoMakeBufInteger(buff, offset, 2)
-        self.guid, offset = self.autoMakeBufInteger(buff, offset, 2)
-        self.mtime, offset = self.autoMakeBufInteger(buff, offset, 4)
-        self.inode_number, offset = self.autoMakeBufInteger(buff, offset, 4)
-        self.nlink, offset = self.autoMakeBufInteger(buff, offset, 4)
-        self.symlink_size, offset = self.autoMakeBufInteger(buff, offset, 4)
-        self.symlink = buff[offset:]
-        return offset
+        offset += self.base_header(buff, offset)
+        offset += self._set_values("<II", ["nlink", "symlink_size"], buff, offset)
+        self.symlink = byt2str(buff[offset : offset + self.symlink_size])
 
     def reg_header(self, buff, offset):
-        self.inode_type, offset = self.autoMakeBufInteger(buff, offset, 2)
-        self.mode, offset = self.autoMakeBufInteger(buff, offset, 2)
-        self.uid, offset = self.autoMakeBufInteger(buff, offset, 2)
-        self.guid, offset = self.autoMakeBufInteger(buff, offset, 2)
-        self.mtime, offset = self.autoMakeBufInteger(buff, offset, 4)
-        self.inode_number, offset = self.autoMakeBufInteger(buff, offset, 4)
-        self.start_block, offset = self.autoMakeBufInteger(buff, offset, 4)
-        self.fragment, offset = self.autoMakeBufInteger(buff, offset, 4)
-        self.offset, offset = self.autoMakeBufInteger(buff, offset, 4)
-        self.file_size, offset = self.autoMakeBufInteger(buff, offset, 4)
+        fields = ["start_block", "fragment", "offset", "file_size"]
+        offset += self.base_header(buff, offset)
+        offset += self._set_values("<IIII", fields, buff, offset)
         self.block_list = buff[offset:]
         return offset
 
     def lreg_header(self, buff, offset):
-        self.inode_type, offset = self.autoMakeBufInteger(buff, offset, 2)
-        self.mode, offset = self.autoMakeBufInteger(buff, offset, 2)
-        self.uid, offset = self.autoMakeBufInteger(buff, offset, 2)
-        self.guid, offset = self.autoMakeBufInteger(buff, offset, 2)
-        self.mtime, offset = self.autoMakeBufInteger(buff, offset, 4)
-        self.inode_number, offset = self.autoMakeBufInteger(buff, offset, 4)
-        self.start_block, offset = self.autoMakeBufInteger(buff, offset, 8)
-        self.file_size, offset = self.autoMakeBufInteger(buff, offset, 8)
-        self.sparse, offset = self.autoMakeBufInteger(buff, offset, 8)
-        self.nlink, offset = self.autoMakeBufInteger(buff, offset, 4)
-        self.fragment, offset = self.autoMakeBufInteger(buff, offset, 4)
-        self.offset, offset = self.autoMakeBufInteger(buff, offset, 4)
-        self.xattr, offset = self.autoMakeBufInteger(buff, offset, 4)
+        fields = [
+            "start_block", "file_size", "sparse", "nlink", "fragment", "offset", "xattr"
+        ]
+        offset += self.base_header(buff, offset)
+        offset += self._set_values("<QQQIIII", fields, buff, offset)
         self.block_list = buff[offset:]
         return offset
 
     def dir_header(self, buff, offset):
-        self.inode_type, offset = self.autoMakeBufInteger(buff, offset, 2)
-        self.mode, offset = self.autoMakeBufInteger(buff, offset, 2)
-        self.uid, offset = self.autoMakeBufInteger(buff, offset, 2)
-        self.guid, offset = self.autoMakeBufInteger(buff, offset, 2)
-        self.mtime, offset = self.autoMakeBufInteger(buff, offset, 4)
-        self.inode_number, offset = self.autoMakeBufInteger(buff, offset, 4)
-        self.start_block, offset = self.autoMakeBufInteger(buff, offset, 4)
-        self.nlink, offset = self.autoMakeBufInteger(buff, offset, 4)
-        self.file_size, offset = self.autoMakeBufInteger(buff, offset, 2)
-        self.offset, offset = self.autoMakeBufInteger(buff, offset, 2)
-        self.parent_inode, offset = self.autoMakeBufInteger(buff, offset, 4)
-        return offset
+        fields = ["start_block", "nlink", "file_size", "offset", "parent_inode"]
+        offset += self.base_header(buff, offset)
+        self._set_values("<IIHHI", fields, buff, offset)
 
     def ldir_header(self, buff, offset):
-        self.inode_type, offset = self.autoMakeBufInteger(buff, offset, 2)
-        self.mode, offset = self.autoMakeBufInteger(buff, offset, 2)
-        self.uid, offset = self.autoMakeBufInteger(buff, offset, 2)
-        self.guid, offset = self.autoMakeBufInteger(buff, offset, 2)
-        self.mtime, offset = self.autoMakeBufInteger(buff, offset, 4)
-        self.inode_number, offset = self.autoMakeBufInteger(buff, offset, 4)
-        self.nlink, offset = self.autoMakeBufInteger(buff, offset, 4)
-        self.file_size, offset = self.autoMakeBufInteger(buff, offset, 4)
-        self.start_block, offset = self.autoMakeBufInteger(buff, offset, 4)
-        self.parent_inode, offset = self.autoMakeBufInteger(buff, offset, 4)
-        self.i_count, offset = self.autoMakeBufInteger(buff, offset, 2)
-        self.offset, offset = self.autoMakeBufInteger(buff, offset, 2)
-        self.xattr, offset = self.autoMakeBufInteger(buff, offset, 4)
+        fields = [
+            "nlink", "file_size", "start_block", "parent_inode",
+            "i_count", "offset", "xattr"
+        ]
+        offset += self.base_header(buff, offset)
+        offset += self._set_values("<IIIIHHI", fields, buff, offset)
         self.index = buff[offset:]
-        return offset
 
 
 class _Dir_entry(_Squashfs_commons):
+
+    FORMAT = "<HhHH"
+    SIZE = struct.calcsize(FORMAT)
+    FIELDS = ["offset", "inode_number", "type", "size"]
 
     def __init__(self):
         self.offset = 0
@@ -597,24 +542,20 @@ class _Dir_entry(_Squashfs_commons):
         self.s_file = None
 
     def fill(self, buffer, ofs):
-        self.offset, ofs = self.autoMakeBufInteger(buffer, ofs, 2)
-        self.inode_number, ofs = self.autoMakeBufInteger(buffer, ofs, 2)
-        self.type, ofs = self.autoMakeBufInteger(buffer, ofs, 2)
-        self.size, ofs = self.autoMakeBufInteger(buffer, ofs, 2)
-        self.name = buffer[ofs : ofs + self.size]
+        ofs += super().fill(buffer, ofs)
+        self.name = buffer[ofs : ofs + self.size + 1]
 
 
 class _Dir_header(_Squashfs_commons):
+
+    FORMAT = "<III"
+    SIZE = struct.calcsize(FORMAT)
+    FIELDS = ["count", "start_block", "inode_number"]
 
     def __init__(self):
         self.count = 0
         self.start_block = 0
         self.inode_number = 0
-
-    def fill(self, buffer, ofs):
-        self.count, ofs = self.autoMakeBufInteger(buffer, ofs, 4)
-        self.start_block, ofs = self.autoMakeBufInteger(buffer, ofs, 4)
-        self.inode_number, ofs = self.autoMakeBufInteger(buffer, ofs, 4)
 
 
 class _Dir:
@@ -632,28 +573,26 @@ class _Dir:
 
 class _Xattr_id(_Squashfs_commons):  # 16
 
+    FORMAT = "<QII"
+    SIZE = struct.calcsize(FORMAT)
+    FIELDS = ["xattr", "count", "size"]
+
     def __init__(self):
         self.xattr = 0
         self.count = 0
         self.size = 0
 
-    def fill(self, buffer, ofs):
-        self.xattr, ofs = self.autoMakeBufInteger(buffer, ofs, 8)
-        self.count, ofs = self.autoMakeBufInteger(buffer, ofs, 4)
-        self.size, ofs = self.autoMakeBufInteger(buffer, ofs, 4)
-
 
 class _Xattr_table(_Squashfs_commons):
+
+    FORMAT = "<QII"
+    SIZE = struct.calcsize(FORMAT)
+    FIELDS = ["xattr_table_start", "xattr_ids", "unused"]
 
     def __init__(self):
         self.xattr_table_start = 0
         self.xattr_ids = 0
         self.unused = 0
-
-    def read(self, myfile):
-        self.xattr_table_start = self.readLong(myfile)
-        self.xattr_ids = self.readInt(myfile)
-        self.unused = self.readInt(myfile)
 
 
 class SquashedFile:
@@ -803,7 +742,7 @@ class SquashedFile:
 
 class SquashFsImage(_Squashfs_commons):
 
-    def __init__(self, filepath=None, offset=None):
+    def __init__(self, filepath=None, offset=0):
         self.comp = None
         self.sBlk = _Squashfs_super_block()
         self.fragment_buffer_size = FRAGMENT_BUFFER_DEFAULT
@@ -827,7 +766,7 @@ class SquashFsImage(_Squashfs_commons):
         self.inode_to_file = {}
         self.root = SquashedFile("", None)
         self.image_file = None
-        self.offset = int(offset) if offset else 0
+        self.offset = offset
         if filepath is not None:
             self.open(filepath)
 
@@ -846,6 +785,7 @@ class SquashFsImage(_Squashfs_commons):
 
     def close(self):
         self.image_file.close()
+        self.image_file = None
 
     def __read_super(self, fd):
         self.sBlk.read(fd)
@@ -1022,7 +962,7 @@ class SquashFsImage(_Squashfs_commons):
             i.xattr = header.xattr
         elif header.inode_type in (SQUASHFS_SYMLINK_TYPE, SQUASHFS_LSYMLINK_TYPE):
             header.symlink_header(self.inode_table, block_ptr)
-            i.symlink = byt2str(self.inode_table[block_ptr + 24 : block_ptr + 24 + header.symlink_size])
+            i.symlink = header.symlink
             i.data = header.symlink_size
             if header.inode_type == SQUASHFS_LSYMLINK_TYPE:
                 i.xattr = self.makeBufInteger(self.inode_table, block_ptr + 24 + header.symlink_size, 4)
@@ -1074,13 +1014,12 @@ class SquashFsImage(_Squashfs_commons):
         while bytes_ < size:
             dirh.fill(self.directory_table, bytes_)
             dir_count = dirh.count + 1
-            bytes_ += 12
+            bytes_ += _Dir_header.SIZE
             while dir_count != 0:
                 dire = _Dir_entry()
                 dir_count -= 1
                 dire.fill(self.directory_table, bytes_)
-                bytes_ += 8
-                dire.name = self.directory_table[bytes_ : bytes_ + dire.size + 1]
+                bytes_ += _Dir_entry.SIZE
                 dire.s_file = SquashedFile(dire.name, s_file)
                 s_file.children.append(dire.s_file)
                 dire.parent = mydir
