@@ -1089,12 +1089,19 @@ class SquashFsImage(_Squashfs_commons):
 
 
 if __name__ == "__main__":
+    import argparse
     import sys
 
-    image = SquashFsImage(sys.argv[1])
+    parser = argparse.ArgumentParser()
+    parser.add_argument("file", help="squashfs filesystem")
+    parser.add_argument("paths", nargs='+', help="directories or files to print information about")
+    parser.add_argument("-V", "--version", action="version", version="%(prog)s v0.8.0")
+    args = parser.parse_args()
+
+    image = SquashFsImage(args.file)
     if len(sys.argv) > 1:
-        for i in range(2, len(sys.argv)):
-            sqashed_filename = sys.argv[i]
+        for path in args.paths:
+            sqashed_filename = path
             squashed_file = image.root.select(sqashed_filename)
             print("--------------%-50.50s --------------" % sqashed_filename)
             if squashed_file is None:
