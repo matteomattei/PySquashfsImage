@@ -7,7 +7,7 @@ Examples:
 
 List all elements in the image:
 -------------------------------
-```
+```python
 from PySquashfsImage import SquashFsImage
 
 image = SquashFsImage('/path/to/my/image.img')
@@ -18,7 +18,7 @@ image.close()
 
 Print all files and folder with human readable path:
 ----------------------------------------------------
-```
+```python
 from PySquashfsImage import SquashFsImage
 
 image = SquashFsImage('/path/to/my/image.img')
@@ -29,7 +29,7 @@ image.close()
 
 Print only files:
 -----------------
-```
+```python
 from PySquashfsImage import SquashFsImage
 
 image = SquashFsImage('/path/to/my/image.img')
@@ -41,15 +41,14 @@ image.close()
 
 Save the content of a file:
 ---------------------------
-```
+```python
 from PySquashfsImage import SquashFsImage
 
 image = SquashFsImage('/path/to/my/image.img')
 for i in image.root.findAll():
-    if i.getName() == b'myfilename':
-        with open(b'/tmp/'+i.getName(),'wb') as f:
-            print(b'Saving original '+i.getPath().encode()+b' in /tmp/'+i.getName())
+    if i.getName() == 'myfilename':
+        with open('/tmp/' + i.getName(), 'wb') as f:
+            print('Saving original ' + i.getPath() + ' in /tmp/' + i.getName())
             f.write(i.getContent())
 image.close()
 ```
-

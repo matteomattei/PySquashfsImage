@@ -229,12 +229,6 @@ SQASHFS_LOOKUP_TYPE = [
 ]
 
 
-def str2byt(data):
-    if isinstance(data, str):
-        return data.encode("latin-1")
-    return data
-
-
 def byt2str(data):
     if isinstance(data, bytes):
         return data.decode("latin-1")
@@ -340,12 +334,13 @@ class _Squashfs_commons:
         for field, value in zip(self.FIELDS, values):
             setattr(self, field, value)
 
-    def fill(self, buffer, ofs):
-        """Set values read from a buffer. Return the amount of bytes read."""
-        values = struct.unpack(self.FORMAT, buffer[ofs : ofs + self.SIZE])
-        for field, value in zip(self.FIELDS, values):
-            setattr(self, field, value)
-        return self.SIZE
+    @classmethod
+    def from_bytes(cls, buffer, offset=0):
+        inst = cls()
+        values = struct.unpack_from(cls.FORMAT, buffer, offset)
+        for field, value in zip(cls.FIELDS, values):
+            setattr(inst, field, value)
+        return inst
 
 
 class _Squashfs_super_block(_Squashfs_commons):
@@ -392,9 +387,6 @@ class _Squashfs_fragment_entry(_Squashfs_commons):
         self.size = 0
         self.unused = 0
         self.fragment = None
-
-    def fill(self, buffer, ofs):
-        return ofs + super().fill(buffer, ofs)
 
 
 class SquashInode:
@@ -467,7 +459,7 @@ class _Inode_header(_Squashfs_commons):
     def _set_values(self, fmt, fields, buff, offset):
         """Return the amount of bytes read from the buffer."""
         size = struct.calcsize(fmt)
-        values = struct.unpack(fmt, buff[offset : offset + size])
+        values = struct.unpack_from(fmt, buff, offset)
         for field, value in zip(fields, values):
             setattr(self, field, value)
         return size
@@ -538,12 +530,16 @@ class _Dir_entry(_Squashfs_commons):
         self.inode_number = 0
         self.type = 0
         self.size = 0
-        self.name = []
+        self.name = None
         self.s_file = None
 
-    def fill(self, buffer, ofs):
-        ofs += super().fill(buffer, ofs)
-        self.name = buffer[ofs : ofs + self.size + 1]
+    @classmethod
+    def from_bytes(cls, buffer, offset=0):
+        # super without arguments is not Python 2 compatible.
+        inst = super(_Dir_entry, cls).from_bytes(buffer, offset)
+        offset += cls.SIZE
+        inst.name = byt2str(buffer[offset : offset + inst.size + 1])
+        return inst
 
 
 class _Dir_header(_Squashfs_commons):
@@ -597,7 +593,7 @@ class _Xattr_table(_Squashfs_commons):
 
 class SquashedFile:
 
-    def __init__(self, name, parent):
+    def __init__(self, name, parent=None):
         self.name = name
         self.children = []
         self.inode = None
@@ -607,7 +603,7 @@ class SquashedFile:
         if self.parent is None:
             return self.name
         else:
-            return self.parent.getPath() + "/" + byt2str(self.name)
+            return self.parent.getPath() + "/" + self.name
 
     def getXattr(self):
         return self.inode.getXattr()
@@ -642,9 +638,9 @@ class SquashedFile:
         return node.children
 
     def select(self, path):
-        if path == b"/":
-            path = b""
-        lpath = [str2byt(i) for i in path.split('/')]
+        if path == "/":
+            path = ''
+        lpath = path.split('/')
         start = self
         ofs = 0
         if not lpath[0]:
@@ -764,7 +760,7 @@ class SquashFsImage(_Squashfs_commons):
         self.total_inodes = 0
         self.directory_table = b''
         self.inode_to_file = {}
-        self.root = SquashedFile("", None)
+        self.root = SquashedFile("")
         self.image_file = None
         self.offset = offset
         if filepath is not None:
@@ -800,7 +796,7 @@ class SquashFsImage(_Squashfs_commons):
 
     def initialize(self, myfile):
         self.__read_super(myfile)
-        self.created_inode = [None for _ in range(self.sBlk.inodes)]
+        self.created_inode = [None] * self.sBlk.inodes
         self.block_size = self.sBlk.block_size
         self.block_log = self.sBlk.block_log
         self.fragment_buffer_size <<= 20 - self.block_log
@@ -833,8 +829,7 @@ class SquashFsImage(_Squashfs_commons):
                 continue
             c_byte = SQUASHFS_COMPRESSED_SIZE_BLOCK(cur_blk)
             if cur_blk != 0:  # non sparse file
-                buffer = self.read_data_block(self.image_file, start, cur_blk)
-                content += buffer
+                content += self.read_data_block(self.image_file, start, cur_blk)
                 start += c_byte
         if inode.frag_bytes != 0:
             start, size = self.read_fragment(inode.fragment)
@@ -857,17 +852,12 @@ class SquashFsImage(_Squashfs_commons):
         offset = 2
         if SQUASHFS_CHECK_DATA(self.sBlk.flags):
             offset = 3
+        myfile.seek(self.offset + start + offset)
+        size = SQUASHFS_COMPRESSED_SIZE(c_byte)
+        block = myfile.read(size)
         if SQUASHFS_COMPRESSED(c_byte):
-            myfile.seek(self.offset + start + offset)
-            c_byte = SQUASHFS_COMPRESSED_SIZE(c_byte)
-            buffer = myfile.read(c_byte)
-            block = self.comp.uncompress(buffer)
-            return (block, start + offset + c_byte, c_byte)
-        else:
-            myfile.seek(self.offset + start + offset)
-            c_byte = SQUASHFS_COMPRESSED_SIZE(c_byte)
-            block = myfile.read(c_byte)
-            return (block, start + offset + c_byte, c_byte)
+            block = self.comp.uncompress(block)
+        return (block, start + offset + size, size)
 
     def uncompress_inode_table(self, myfile, start, end):
         bytes_ = 0
@@ -879,21 +869,20 @@ class SquashFsImage(_Squashfs_commons):
 
     def read_fragment_table(self, myfile):
         indexes = SQUASHFS_FRAGMENT_INDEXES(self.sBlk.fragments)
-        fragment_table_index = [None for _ in range(indexes)]
+        fragment_table_index = []
         self.fragment_table = []
         if self.sBlk.fragments == 0:
-            return True
+            return
         myfile.seek(self.offset + self.sBlk.fragment_table_start)
-        for i in range(indexes):
-            fragment_table_index[i] = self.readLong(myfile)
+        for _ in range(indexes):
+            fragment_table_index.append(self.readLong(myfile))
         table = b""
-        for i in range(indexes):
-            block = self.read_block(myfile, fragment_table_index[i])[0]
-            table += block
+        for fti in fragment_table_index:
+            table += self.read_block(myfile, fti)[0]
         ofs = 0
         while ofs < len(table):
-            entry = _Squashfs_fragment_entry()
-            ofs = entry.fill(table, ofs)
+            entry = _Squashfs_fragment_entry.from_bytes(table, ofs)
+            ofs += _Squashfs_fragment_entry.SIZE
             entry.fragment = self.read_data_block(myfile, entry.start_block, entry.size)
             self.fragment_table.append(entry)
 
@@ -1010,35 +999,32 @@ class SquashFsImage(_Squashfs_commons):
         mydir.mtime = i.time
         mydir.xattr = i.xattr
         mydir.dirs = []
-        dirh = _Dir_header()
         while bytes_ < size:
-            dirh.fill(self.directory_table, bytes_)
+            dirh = _Dir_header.from_bytes(self.directory_table, bytes_)
             dir_count = dirh.count + 1
             bytes_ += _Dir_header.SIZE
             while dir_count != 0:
-                dire = _Dir_entry()
+                dire = _Dir_entry.from_bytes(self.directory_table, bytes_)
                 dir_count -= 1
-                dire.fill(self.directory_table, bytes_)
-                bytes_ += _Dir_entry.SIZE
                 dire.s_file = SquashedFile(dire.name, s_file)
                 s_file.children.append(dire.s_file)
                 dire.parent = mydir
                 dire.start_block = dirh.start_block
                 mydir.dirs.append(dire)
                 mydir.dir_count += 1
-                bytes_ += dire.size + 1
+                bytes_ += _Dir_entry.SIZE + dire.size + 1
         return (mydir, i)
 
     def read_uids_guids(self, myfile):
         indexes = SQUASHFS_ID_BLOCKS(self.sBlk.no_ids)
-        id_index_table = [None for _ in range(indexes)]
-        self.id_table = [None for _ in range(self.sBlk.no_ids)]
+        id_index_table = []
+        self.id_table = [None] * self.sBlk.no_ids
         myfile.seek(self.offset + self.sBlk.id_table_start)
-        for i in range(indexes):
-            id_index_table[i] = self.makeInteger(myfile, SQUASHFS_ID_BLOCK_BYTES(1))
-        for i in range(indexes):
-            myfile.seek(self.offset + id_index_table[i])
-            block = self.read_block(myfile, id_index_table[i])[0]
+        for _ in range(indexes):
+            id_index_table.append(self.makeInteger(myfile, SQUASHFS_ID_BLOCK_BYTES(1)))
+        for i, idx in enumerate(id_index_table):
+            myfile.seek(self.offset + idx)
+            block = self.read_block(myfile, idx)[0]
             offset = 0
             index = i * (SQUASHFS_METADATA_SIZE // 4)
             while offset < len(block):
@@ -1058,16 +1044,14 @@ class SquashFsImage(_Squashfs_commons):
         for _ in range(indexes):
             index.append(self.makeInteger(myfile, SQUASHFS_XATTR_BLOCK_BYTES(1)))
         xattr_ids = {}
-        for i in range(indexes):
-            block = self.read_block(myfile, index[i])[0]
+        for i, idx in enumerate(index):
+            block = self.read_block(myfile, idx)[0]
             cur_idx = (i * SQUASHFS_METADATA_SIZE) / 16
             ofs = 0
             while ofs < len(block):
-                xattr_id = _Xattr_id()
-                xattr_id.fill(block, ofs)
-                xattr_ids[cur_idx] = xattr_id
+                xattr_ids[cur_idx] = _Xattr_id.from_bytes(block, ofs)
                 cur_idx += 1
-                ofs += 16
+                ofs += _Xattr_id.SIZE
         start = xattr_table_start
         end = index[0]
         i = 0
@@ -1143,7 +1127,6 @@ if __name__ == "__main__":
                 print("++++++++++++++%-50.50s (%8d)++++++++++++++" % (i.getPath(), len(content)))
                 oname = i.name + "_saved_" + str(i.inode.inode_number)
                 print("written %s from %s %d" % (oname, i.name, len(content)))
-                of = open(oname, "wb")
-                of.write(content)
-                of.close()
+                with open(oname, "wb") as of:
+                    of.write(content)
         image.close()
