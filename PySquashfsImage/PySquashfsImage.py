@@ -1088,11 +1088,11 @@ class SquashFsImage(_Squashfs_commons):
         return mydir
 
 
-if __name__ == "__main__":
+def main():
     import argparse
     import sys
 
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description="Print information about squashfs images.")
     parser.add_argument("file", help="squashfs filesystem")
     parser.add_argument("paths", nargs='+', help="directories or files to print information about")
     parser.add_argument("-V", "--version", action="version", version="%(prog)s v0.8.0")
@@ -1137,3 +1137,7 @@ if __name__ == "__main__":
                 with open(oname, "wb") as of:
                     of.write(content)
         image.close()
+
+
+if __name__ == "__main__":
+    main()
