@@ -246,7 +246,8 @@ class _ZlibCompressor(_Compressor):
     name = "zlib"
 
     def __init__(self):
-        self._lib = __import__('zlib')
+        import zlib
+        self._lib = zlib
 
     def uncompress(self, src):
         return self._lib.decompress(src)
@@ -270,21 +271,22 @@ class _LZ4Compressor(_Compressor):
     name = "lz4"
 
     def __init__(self):
-        self._lib = __import__('lz4.frame')
+        import lz4.frame
+        self._lib = lz4.frame
 
     def uncompress(self, src):
-        self._lib.decompress(src)
+        return self._lib.decompress(src)
 
 
 class _ZSTDCompressor(_Compressor):
     name = "zstd"
 
     def __init__(self):
-        # https://pypi.org/project/zstandard/
-        self._lib = __import__('zstandard')
+        import zstandard
+        self._lib = zstandard.ZstdDecompressor()
 
     def uncompress(self, src):
-        return self._lib.ZstdDecompressor().decompress(src)
+        return self._lib.decompress(src)
 
 
 _compressors = {
