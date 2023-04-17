@@ -1,54 +1,63 @@
 PySquashfsImage is a lightweight library for reading squashfs image files in Python.
 It provides a way to read squashfs images header and to retrieve encapsulated binaries.
-It is compatible with Python 2 and Python 3.
+It is compatible with Python 2.6, 2.7 and Python 3.1+.
+
+## Installation
+
+```
+pip install PySquashfsImage
+```
+
+If you are using Python <= 3.2 and need LZMA decompression, install
+[backports.lzma](https://pypi.org/project/backports.lzma/).
+
+For LZ4 decompression, install [lz4](https://pypi.org/project/lz4/) (Python 3.7+).
+
+For Zstandard decompression install [zstandard](https://pypi.org/project/zstandard/) (Python 3.7+).
 
 ## Use as a library
 
 ### List all elements in the image:
--------------------------------
 ```python
 from PySquashfsImage import SquashFsImage
 
 image = SquashFsImage('/path/to/my/image.img')
-for i in image.root.find_all():
-    print(i.name)
+for item in image.root.find_all():
+    print(item.name)
 image.close()
 ```
 
 ### Print all files and folder with human readable path:
-----------------------------------------------------
 ```python
 from PySquashfsImage import SquashFsImage
 
 image = SquashFsImage('/path/to/my/image.img')
-for i in image.root.find_all_paths():
-    print(i)
+for path in image.root.find_all_paths():
+    print(path)
 image.close()
 ```
 
 ### Print only files:
------------------
 ```python
 from PySquashfsImage import SquashFsImage
 
 image = SquashFsImage('/path/to/my/image.img')
-for i in image.root.find_all():
-    if not i.is_dir:
-        print(i.path)
+for item in image.root.find_all():
+    if not item.is_dir:
+        print(item.path)
 image.close()
 ```
 
 ### Save the content of a file:
----------------------------
 ```python
 from PySquashfsImage import SquashFsImage
 
 image = SquashFsImage('/path/to/my/image.img')
-for i in image.root.find_all():
-    if i.name == 'myfilename':
-        with open('/tmp/' + i.name, 'wb') as f:
-            print('Saving original ' + i.path + ' in /tmp/' + i.name)
-            f.write(i.read_bytes())
+for item in image.root.find_all():
+    if item.name == 'myfilename':
+        with open('/tmp/' + item.name, 'wb') as f:
+            print('Saving original ' + item.path + ' in /tmp/' + item.name)
+            f.write(item.read_bytes())
 image.close()
 ```
 
