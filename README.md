@@ -10,8 +10,8 @@ It is compatible with Python 2 and Python 3.
 from PySquashfsImage import SquashFsImage
 
 image = SquashFsImage('/path/to/my/image.img')
-for i in image.root.findAll():
-    print(i.getName())
+for i in image.root.find_all():
+    print(i.name)
 image.close()
 ```
 
@@ -21,7 +21,7 @@ image.close()
 from PySquashfsImage import SquashFsImage
 
 image = SquashFsImage('/path/to/my/image.img')
-for i in image.root.findAllPaths():
+for i in image.root.find_all_paths():
     print(i)
 image.close()
 ```
@@ -32,9 +32,9 @@ image.close()
 from PySquashfsImage import SquashFsImage
 
 image = SquashFsImage('/path/to/my/image.img')
-for i in image.root.findAll():
-    if not i.isFolder():
-        print(i.getPath())
+for i in image.root.find_all():
+    if not i.is_dir:
+        print(i.path)
 image.close()
 ```
 
@@ -44,11 +44,11 @@ image.close()
 from PySquashfsImage import SquashFsImage
 
 image = SquashFsImage('/path/to/my/image.img')
-for i in image.root.findAll():
-    if i.getName() == 'myfilename':
-        with open('/tmp/' + i.getName(), 'wb') as f:
-            print('Saving original ' + i.getPath() + ' in /tmp/' + i.getName())
-            f.write(i.getContent())
+for i in image.root.find_all():
+    if i.name == 'myfilename':
+        with open('/tmp/' + i.name, 'wb') as f:
+            print('Saving original ' + i.path + ' in /tmp/' + i.name)
+            f.write(i.read_bytes())
 image.close()
 ```
 
