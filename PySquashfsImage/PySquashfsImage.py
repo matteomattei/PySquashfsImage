@@ -300,7 +300,7 @@ _compressors = {
 pyVersionTwo = sys.version_info[0] < 3
 
 
-class _Squashfs_commons(object):  # Explicit new-style class for Python 2
+class _SquashfsCommons(object):  # Explicit new-style class for Python 2
 
     def makeInteger(self, myfile, length):
         """Assemble multibyte integer."""
@@ -346,7 +346,7 @@ class _Squashfs_commons(object):  # Explicit new-style class for Python 2
         return inst
 
 
-class _Squashfs_super_block(_Squashfs_commons):
+class _SquashfsSuperBlock(_SquashfsCommons):
 
     FORMAT = "<IIIIIHHHHHHQQQQQQQQ"
     SIZE = struct.calcsize(FORMAT)
@@ -379,7 +379,7 @@ class _Squashfs_super_block(_Squashfs_commons):
         self.lookup_table_start = 0
 
 
-class _Squashfs_fragment_entry(_Squashfs_commons):
+class _SquashfsFragmentEntry(_SquashfsCommons):
 
     FORMAT = "<QII"
     SIZE = struct.calcsize(FORMAT)
@@ -423,7 +423,7 @@ class SquashInode:
         return (self.mode & mask) == mask
 
 
-class _Inode_header(_Squashfs_commons):
+class _InodeHeader(_SquashfsCommons):
 
     BASE_FORMAT = "<HHHHII"
     BASE_FIELDS = ["inode_type", "mode", "uid", "guid", "mtime", "inode_number"]
@@ -522,7 +522,7 @@ class _Inode_header(_Squashfs_commons):
         self.index = buff[offset:]
 
 
-class _Dir_entry(_Squashfs_commons):
+class _DirEntry(_SquashfsCommons):
 
     FORMAT = "<HhHH"
     SIZE = struct.calcsize(FORMAT)
@@ -539,13 +539,13 @@ class _Dir_entry(_Squashfs_commons):
     @classmethod
     def from_bytes(cls, buffer, offset=0):
         # super without arguments is not Python 2 compatible.
-        inst = super(_Dir_entry, cls).from_bytes(buffer, offset)
+        inst = super(_DirEntry, cls).from_bytes(buffer, offset)
         offset += cls.SIZE
         inst.name = byt2str(buffer[offset : offset + inst.size + 1])
         return inst
 
 
-class _Dir_header(_Squashfs_commons):
+class _DirHeader(_SquashfsCommons):
 
     FORMAT = "<III"
     SIZE = struct.calcsize(FORMAT)
@@ -570,7 +570,7 @@ class _Dir:
         self.dirs = []
 
 
-class _Xattr_id(_Squashfs_commons):  # 16
+class _XattrId(_SquashfsCommons):  # 16
 
     FORMAT = "<QII"
     SIZE = struct.calcsize(FORMAT)
@@ -582,7 +582,7 @@ class _Xattr_id(_Squashfs_commons):  # 16
         self.size = 0
 
 
-class _Xattr_table(_Squashfs_commons):
+class _XattrTable(_SquashfsCommons):
 
     FORMAT = "<QII"
     SIZE = struct.calcsize(FORMAT)
@@ -739,11 +739,11 @@ class SquashedFile:
         return ''.join(ret)
 
 
-class SquashFsImage(_Squashfs_commons):
+class SquashFsImage(_SquashfsCommons):
 
     def __init__(self, filepath=None, offset=0):
         self.comp = None
-        self.sBlk = _Squashfs_super_block()
+        self.sBlk = _SquashfsSuperBlock()
         self.fragment_buffer_size = FRAGMENT_BUFFER_DEFAULT
         self.data_buffer_size = DATA_BUFFER_DEFAULT
         self.block_size = 0
@@ -884,8 +884,8 @@ class SquashFsImage(_Squashfs_commons):
             table += self.read_block(myfile, fti)[0]
         ofs = 0
         while ofs < len(table):
-            entry = _Squashfs_fragment_entry.from_bytes(table, ofs)
-            ofs += _Squashfs_fragment_entry.SIZE
+            entry = _SquashfsFragmentEntry.from_bytes(table, ofs)
+            ofs += _SquashfsFragmentEntry.SIZE
             entry.fragment = self.read_data_block(myfile, entry.start_block, entry.size)
             self.fragment_table.append(entry)
 
@@ -898,7 +898,7 @@ class SquashFsImage(_Squashfs_commons):
         bytes_ = self.inode_table_hash[start]
         block_ptr = bytes_ + offset
         i = SquashInode(self)
-        header = _Inode_header()
+        header = _InodeHeader()
         header.base_header(self.inode_table, block_ptr)
         i.uid = self.id_table[header.uid]
         i.gid = self.id_table[header.guid]
@@ -1003,11 +1003,11 @@ class SquashFsImage(_Squashfs_commons):
         mydir.xattr = i.xattr
         mydir.dirs = []
         while bytes_ < size:
-            dirh = _Dir_header.from_bytes(self.directory_table, bytes_)
+            dirh = _DirHeader.from_bytes(self.directory_table, bytes_)
             dir_count = dirh.count + 1
-            bytes_ += _Dir_header.SIZE
+            bytes_ += _DirHeader.SIZE
             while dir_count != 0:
-                dire = _Dir_entry.from_bytes(self.directory_table, bytes_)
+                dire = _DirEntry.from_bytes(self.directory_table, bytes_)
                 dir_count -= 1
                 dire.s_file = SquashedFile(dire.name, s_file)
                 s_file.children.append(dire.s_file)
@@ -1015,7 +1015,7 @@ class SquashFsImage(_Squashfs_commons):
                 dire.start_block = dirh.start_block
                 mydir.dirs.append(dire)
                 mydir.dir_count += 1
-                bytes_ += _Dir_entry.SIZE + dire.size + 1
+                bytes_ += _DirEntry.SIZE + dire.size + 1
         return (mydir, i)
 
     def read_uids_guids(self, myfile):
@@ -1035,7 +1035,7 @@ class SquashFsImage(_Squashfs_commons):
                 index += 1
 
     def read_xattrs_from_disk(self, myfile):
-        id_table = _Xattr_table()
+        id_table = _XattrTable()
         if self.sBlk.xattr_id_table_start == SQUASHFS_INVALID_BLK:
             return SQUASHFS_INVALID_BLK
         myfile.seek(self.offset + self.sBlk.xattr_id_table_start)
@@ -1052,9 +1052,9 @@ class SquashFsImage(_Squashfs_commons):
             cur_idx = (i * SQUASHFS_METADATA_SIZE) / 16
             ofs = 0
             while ofs < len(block):
-                xattr_ids[cur_idx] = _Xattr_id.from_bytes(block, ofs)
+                xattr_ids[cur_idx] = _XattrId.from_bytes(block, ofs)
                 cur_idx += 1
-                ofs += _Xattr_id.SIZE
+                ofs += _XattrId.SIZE
         start = xattr_table_start
         end = index[0]
         i = 0
