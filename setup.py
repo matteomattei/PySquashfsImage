@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+from io import open  # Remove this import when dropping Python 2 support
 from setuptools import setup, find_packages
 
 with open("README.md", 'r', encoding="utf8") as f:

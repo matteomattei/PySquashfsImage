@@ -257,9 +257,10 @@ class _XZCompressor(_Compressor):
 
     def __init__(self):
         try:
-            self._lib = __import__('lzma')
+            import lzma  # Python 3.3+
         except ImportError:
-            self._lib = __import__('backports.lzma')
+            from backports import lzma
+        self._lib = lzma
 
     def uncompress(self, src):
         return self._lib.decompress(src)
@@ -297,7 +298,7 @@ _compressors = {
 pyVersionTwo = sys.version_info[0] < 3
 
 
-class _Squashfs_commons:
+class _Squashfs_commons(object):  # Explicit new-style class for Python 2
 
     def makeInteger(self, myfile, length):
         """Assemble multibyte integer."""
