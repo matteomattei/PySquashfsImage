@@ -22,6 +22,7 @@ __all__ = ['SquashFsImage', 'SquashedFile', 'SquashInode']
 import struct
 import sys
 import stat
+import warnings
 
 SQUASHFS_CHECK = 2
 
@@ -446,14 +447,20 @@ class SquashInode:
         return self._xattr
 
     def getXattr(self):
-        """Deprecated. Use the xattr property instead."""
+        """Deprecated. Use the `xattr` property instead."""
+        warnings.warn("SquashInode.getXattr() is deprecated. "
+                      "Use the xattr property instead",
+                      DeprecationWarning, stacklevel=2)
         return self.xattr
 
     def read_bytes(self):
         return self.image.read_file(self)
 
     def getContent(self):
-        """Deprecated. Use SquashInode.read_bytes() instead."""
+        """Deprecated. Use `SquashInode.read_bytes()` instead."""
+        warnings.warn("SquashInode.getContent() is deprecated. "
+                      "Use read_bytes() instead",
+                      DeprecationWarning, stacklevel=2)
         return self.read_bytes()
 
 
@@ -732,11 +739,17 @@ class SquashedFile:
         return ''.join(ret)
 
     def getPath(self):
-        """Deprecated. Use the path property instead."""
+        """Deprecated. Use the `path` property instead."""
+        warnings.warn("SquashedFile.getPath() is deprecated. "
+                      "Use the path property instead",
+                      DeprecationWarning, stacklevel=2)
         return self.path
 
     def getXattr(self):
-        """Deprecated. Use the xattr property instead."""
+        """Deprecated. Use the `xattr` property instead."""
+        warnings.warn("SquashedFile.getXattr() is deprecated. "
+                      "Use the xattr property instead",
+                      DeprecationWarning, stacklevel=2)
         return self.xattr
 
     def find_all(self):
@@ -746,7 +759,10 @@ class SquashedFile:
         return ret
 
     def findAll(self):
-        """Deprecated. Use SquashedFile.find_all() instead."""
+        """Deprecated. Use `SquashedFile.find_all()` instead."""
+        warnings.warn("SquashedFile.findAll() is deprecated. "
+                      "Use find_all() instead",
+                      DeprecationWarning, stacklevel=2)
         return self.find_all()
 
     def find_all_paths(self):
@@ -756,11 +772,17 @@ class SquashedFile:
         return ret
 
     def findAllPaths(self):
-        """Deprecated. Use SquashedFile.find_all_paths() instead."""
+        """Deprecated. Use `SquashedFile.find_all_paths()` instead."""
+        warnings.warn("SquashedFile.findAllPaths() is deprecated. "
+                      "Use find_all_paths() instead",
+                      DeprecationWarning, stacklevel=2)
         return self.find_all_paths()
 
     def getContent(self):
-        """Deprecated. Use SquashedFile.read_bytes() instead."""
+        """Deprecated. Use `SquashedFile.read_bytes()` instead."""
+        warnings.warn("SquashedFile.getContent() is deprecated. "
+                      "Use read_bytes() instead",
+                      DeprecationWarning, stacklevel=2)
         return self.read_bytes()
 
     def read_bytes(self):
@@ -807,22 +829,34 @@ class SquashedFile:
         return None
 
     def isFolder(self):
-        """Deprecated. Use the is_dir property instead."""
+        """Deprecated. Use the `is_dir` property instead."""
+        warnings.warn("SquashedFile.isFolder() is deprecated. "
+                      "Use the is_dir property instead",
+                      DeprecationWarning, stacklevel=2)
         return self.is_dir
 
     def isLink(self):
-        """Deprecated. Use the is_symlink property instead."""
+        """Deprecated. Use the `is_symlink` property instead."""
+        warnings.warn("SquashedFile.isLink() is deprecated. "
+                      "Use the is_symlink property instead",
+                      DeprecationWarning, stacklevel=2)
         return self.is_symlink
 
     def close(self):
         self.inode.image.close()
 
     def getLength(self):
-        """Deprecated. Use the size property instead."""
+        """Deprecated. Use the `size` property instead."""
+        warnings.warn("SquashedFile.getLength() is deprecated. "
+                      "Use the size property instead",
+                      DeprecationWarning, stacklevel=2)
         return self.size
 
     def getName(self):
-        """Deprecated. Use the name property instead."""
+        """Deprecated. Use the `name` property instead."""
+        warnings.warn("SquashedFile.getName() is deprecated. "
+                      "Use the name property instead",
+                      DeprecationWarning, stacklevel=2)
         return self.name
 
     def readlink(self):
@@ -831,11 +865,17 @@ class SquashedFile:
         return self.inode.symlink
 
     def getLink(self):
-        """Deprecated. Use SquashedFile.readlink() instead."""
+        """Deprecated. Use `SquashedFile.readlink()` instead."""
+        warnings.warn("SquashedFile.getLink() is deprecated. "
+                      "Use readlink() instead",
+                      DeprecationWarning, stacklevel=2)
         return self.readlink()
 
     def getMode(self):
-        """Deprecated. Use the filemode property instead."""
+        """Deprecated. Use the `filemode` property instead."""
+        warnings.warn("SquashedFile.getMode() is deprecated. "
+                      "Use the filemode property instead",
+                      DeprecationWarning, stacklevel=2)
         return self.filemode
 
 
@@ -874,7 +914,10 @@ class SquashFsImage(_SquashfsCommons):
         return self._root
 
     def getRoot(self):
-        """Deprecated. Use the root property instead."""
+        """Deprecated. Use the `root` property instead."""
+        warnings.warn("SquashFsImage.getRoot() is deprecated. "
+                      "Use the root property instead",
+                      DeprecationWarning, stacklevel=2)
         return self.root
 
     def set_file(self, fd):
@@ -883,7 +926,10 @@ class SquashFsImage(_SquashfsCommons):
         self.initialize(self.image_file)
 
     def setFile(self, fd):
-        """Deprecated. Use SquashFsImage.set_file() instead."""
+        """Deprecated. Use `SquashFsImage.set_file()` instead."""
+        warnings.warn("SquashFsImage.setFile() is deprecated. "
+                      "Use set_file() instead",
+                      DeprecationWarning, stacklevel=2)
         self.set_file(fd)
 
     def open(self, filepath):
@@ -951,7 +997,10 @@ class SquashFsImage(_SquashfsCommons):
         return content
 
     def getFileContent(self, inode):
-        """Deprecated. Use SquashFsImage.read_file() instead."""
+        """Deprecated. Use `SquashFsImage.read_file()` instead."""
+        warnings.warn("SquashFsImage.getFileContent() is deprecated. "
+                      "Use read_file() instead",
+                      DeprecationWarning, stacklevel=2)
         return self.read_file(inode)
 
     def read_block_list(self, inode):
