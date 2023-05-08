@@ -19,9 +19,10 @@ http://squashfs.sourceforge.net/
 """
 __all__ = ['SquashFsImage', 'SquashedFile', 'SquashInode']
 
+import io
+import stat
 import struct
 import sys
-import stat
 import warnings
 
 SQUASHFS_CHECK = 2
@@ -643,6 +644,9 @@ class SquashedFile:
         self.inode = None
         self.parent = parent
 
+    def __iter__(self):
+        return self.iterdir()
+
     @property
     def is_dir(self):
         if self.parent is None:
@@ -778,6 +782,32 @@ class SquashedFile:
                       DeprecationWarning, stacklevel=2)
         return self.find_all_paths()
 
+    def iterdir(self):
+        """If called on a directory, yield its children."""
+        for child in self.children:
+            yield child
+
+    def riter(self):
+        """Iterate over all elements in the subtree."""
+        yield self
+        for child in self.iterdir():
+            for item in child.riter():
+                yield item
+
+    def riterpaths(self):
+        """Iterate over all paths in the subtree."""
+        yield self.path
+        for child in self.iterdir():
+            for path in child.riterpaths():
+                yield path
+
+    def find(self, filename):
+        """Find the first file with this name in the subtree."""
+        for file in self.riter():
+            if file.name == filename:
+                return file
+        return None
+
     def getContent(self):
         """Deprecated. Use `SquashedFile.read_bytes()` instead."""
         warnings.warn("SquashedFile.getContent() is deprecated. "
@@ -909,9 +939,24 @@ class SquashFsImage(_SquashfsCommons):
         if filepath is not None:
             self.open(filepath)
 
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.close()
+
+    def __iter__(self):
+        return self._root.riter()
+
     @property
     def root(self):
         return self._root
+
+    @classmethod
+    def from_bytes(cls, bytes_, offset=0):
+        self = cls(offset=offset)
+        self.set_file(io.BytesIO(bytes_))
+        return self
 
     def getRoot(self):
         """Deprecated. Use the `root` property instead."""
@@ -1251,6 +1296,9 @@ class SquashFsImage(_SquashfsCommons):
                 self.inode_to_file[i.inode_number] = dir_entry.s_file
                 dir_entry.s_file.inode = i
         return mydir
+
+    def find(self, filename):
+        return self._root.find(filename)
 
 
 def main():

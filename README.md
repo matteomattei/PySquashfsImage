@@ -22,7 +22,7 @@ For Zstandard decompression install [zstandard](https://pypi.org/project/zstanda
 from PySquashfsImage import SquashFsImage
 
 image = SquashFsImage('/path/to/my/image.img')
-for item in image.root.find_all():
+for item in image:
     print(item.name)
 image.close()
 ```
@@ -31,34 +31,36 @@ image.close()
 ```python
 from PySquashfsImage import SquashFsImage
 
-image = SquashFsImage('/path/to/my/image.img')
-for path in image.root.find_all_paths():
-    print(path)
-image.close()
+# Use with a context manager (recommended).
+with SquashFsImage('/path/to/my/image.img') as image:
+    for path in image.root.riterpaths():
+        print(path)
 ```
 
 ### Print only files:
 ```python
 from PySquashfsImage import SquashFsImage
 
-image = SquashFsImage('/path/to/my/image.img')
-for item in image.root.find_all():
-    if not item.is_dir:
-        print(item.path)
-image.close()
+with open('/path/to/my/image.img', "rb") as f:
+    imgbytes = f.read()
+
+# Create an image from bytes.
+with SquashFsImage.from_bytes(imgbytes) as image:
+    for item in image:
+        if not item.is_dir:
+            print(item.path)
 ```
 
 ### Save the content of a file:
 ```python
 from PySquashfsImage import SquashFsImage
 
-image = SquashFsImage('/path/to/my/image.img')
-for item in image.root.find_all():
-    if item.name == 'myfilename':
-        with open('/tmp/' + item.name, 'wb') as f:
-            print('Saving original ' + item.path + ' in /tmp/' + item.name)
-            f.write(item.read_bytes())
-image.close()
+with SquashFsImage('/path/to/my/image.img') as image:
+    myfile = image.find('myfilename')
+    if myfile is not None:
+        with open('/tmp/' + myfile.name, 'wb') as f:
+            print('Saving original ' + myfile.path + ' in /tmp/' + myfile.name)
+            f.write(myfile.read_bytes())
 ```
 
 ## Use as a command
