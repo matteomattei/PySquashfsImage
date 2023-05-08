@@ -20,6 +20,7 @@ http://squashfs.sourceforge.net/
 __all__ = ['SquashFsImage', 'SquashedFile', 'SquashInode']
 
 import io
+import posixpath
 import stat
 import struct
 import sys
@@ -688,9 +689,9 @@ class SquashedFile:
     @property
     def path(self):
         if self.parent is None:
-            return self._name
+            return '/'
         else:
-            return self.parent.path + "/" + self._name
+            return posixpath.join(self.parent.path, self._name)
 
     @property
     def xattr(self):
