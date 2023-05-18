@@ -17,14 +17,19 @@ https://github.com/matteomattei/PySquashfsImage
 http://squashfs.sourceforge.net/
 
 """
-__all__ = ['SquashFsImage', 'SquashedFile', 'SquashInode']
+__all__ = ["SquashFsImage"]
 
 import io
-import posixpath
 import stat
 import struct
 import sys
 import warnings
+from ctypes import sizeof
+
+from .const import Type
+from .file import Directory, filetype
+from .structure import DirEntry, DirHeader
+from .structure.inode import InodeHeader, inomap
 
 SQUASHFS_CHECK = 2
 
@@ -56,22 +61,6 @@ SQUASHFS_INVALID_FRAG = 0xFFFFFFFF
 SQUASHFS_INVALID_XATTR = 0xFFFFFFFF
 SQUASHFS_INVALID_BLK = 0xFFFFFFFFFFFFFFFF  # -1
 SQUASHFS_USED_BLK = SQUASHFS_INVALID_BLK - 1  # -2
-
-SQUASHFS_DIR_TYPE = 1
-SQUASHFS_FILE_TYPE = 2
-SQUASHFS_SYMLINK_TYPE = 3
-SQUASHFS_BLKDEV_TYPE = 4
-SQUASHFS_CHRDEV_TYPE = 5
-SQUASHFS_FIFO_TYPE = 6
-SQUASHFS_SOCKET_TYPE = 7
-SQUASHFS_LDIR_TYPE = 8
-SQUASHFS_LREG_TYPE = 9
-SQUASHFS_LSYMLINK_TYPE = 10
-SQUASHFS_LBLKDEV_TYPE = 11
-SQUASHFS_LCHRDEV_TYPE = 12
-SQUASHFS_LFIFO_TYPE = 13
-SQUASHFS_LSOCKET_TYPE = 14
-
 
 # ****** MACROS
 SQUASHFS_COMPRESSED_BIT = 1 << 15
@@ -213,7 +202,7 @@ def SQUASHFS_XATTR_OFFSET(A):
     return A & 0xFFFF
 
 
-SQASHFS_LOOKUP_TYPE = [
+SQUASHFS_LOOKUP_TYPE = [
     0,
     stat.S_IFDIR,
     stat.S_IFREG,
@@ -230,12 +219,6 @@ SQASHFS_LOOKUP_TYPE = [
     stat.S_IFIFO,
     stat.S_IFSOCK
 ]
-
-
-def byt2str(data):
-    if isinstance(data, bytes):
-        return data.decode("latin-1")
-    return data
 
 
 class _Compressor:
@@ -300,39 +283,8 @@ _compressors = {
     ZSTD_COMPRESSION: _ZSTDCompressor
 }
 
-pyVersionTwo = sys.version_info[0] < 3
-
 
 class _SquashfsCommons(object):  # Explicit new-style class for Python 2
-
-    def make_integer(self, myfile, length):
-        """Assemble multibyte integer."""
-        return self.make_buf_integer(myfile.read(length), 0, length)
-
-    def make_buf_integer(self, buf, start, length):
-        """Assemble multibyte integer."""
-        if pyVersionTwo:
-            ret = 0
-            pwr = 1
-            for i in range(start, start + length):
-                ret += (ord(buf[i]) & 0xFF) * pwr
-                pwr *= 0x100
-            return ret
-        else:
-            return int.from_bytes(buf[start : start + length], byteorder='little')
-
-    def _read_integer(self, myfile, fmt):
-        return struct.unpack(fmt, myfile.read(struct.calcsize(fmt)))[0]
-
-    def read_short(self, myfile):
-        return self._read_integer(myfile, "<H")
-
-    def read_long(self, myfile):
-        return self._read_integer(myfile, "<Q")
-
-    def auto_make_buf_integer(self, buf, start, length):
-        """Assemble multibyte integer."""
-        return (self.make_buf_integer(buf, start, length), start + length)
 
     def read(self, myfile):
         """Set values read from a file object."""
@@ -395,224 +347,6 @@ class _SquashfsFragmentEntry(_SquashfsCommons):
         self.fragment = None
 
 
-class SquashInode:
-
-    def __init__(self, owner_image):
-        self.image = owner_image
-        self.blocks = 0
-        self.block_ptr = 0
-        self.data = 0
-        self.fragment = 0
-        self.frag_bytes = 0
-        self.gid = 0
-        self.inode_number = 0
-        self.mode = 0
-        self.offset = 0
-        self.start = 0
-        self.symlink = 0
-        self.time = 0
-        self.type = 0
-        self.uid = 0
-        self.sparse = 0
-        self._xattr = 0
-
-    @property
-    def is_dir(self):
-        return stat.S_ISDIR(self.mode)
-
-    @property
-    def is_file(self):
-        return stat.S_ISREG(self.mode)
-
-    @property
-    def is_symlink(self):
-        return stat.S_ISLNK(self.mode)
-
-    @property
-    def is_block_device(self):
-        return stat.S_ISBLK(self.mode)
-
-    @property
-    def is_char_device(self):
-        return stat.S_ISCHR(self.mode)
-
-    @property
-    def is_fifo(self):
-        return stat.S_ISFIFO(self.mode)
-
-    @property
-    def is_socket(self):
-        return stat.S_ISSOCK(self.mode)
-
-    @property
-    def xattr(self):
-        return self._xattr
-
-    def getXattr(self):
-        """Deprecated. Use the `xattr` property instead."""
-        warnings.warn("SquashInode.getXattr() is deprecated. "
-                      "Use the xattr property instead",
-                      DeprecationWarning, stacklevel=2)
-        return self.xattr
-
-    def read_bytes(self):
-        return self.image.read_file(self)
-
-    def getContent(self):
-        """Deprecated. Use `SquashInode.read_bytes()` instead."""
-        warnings.warn("SquashInode.getContent() is deprecated. "
-                      "Use read_bytes() instead",
-                      DeprecationWarning, stacklevel=2)
-        return self.read_bytes()
-
-
-class _InodeHeader(_SquashfsCommons):
-
-    BASE_FORMAT = "<HHHHII"
-    BASE_FIELDS = ["inode_type", "mode", "uid", "guid", "mtime", "inode_number"]
-
-    def __init__(self):
-        self.inode_type = 0
-        self.mode = 0
-        self.uid = 0
-        self.guid = 0
-        self.mtime = 0
-        self.inode_number = 0
-
-        self.rdev = 0
-        self.xattr = 0
-
-        self.nlink = 0
-        self.symlink_size = 0
-        self.symlink = []
-
-        self.start_block = 0
-        self.fragment = 0
-
-        self.block_list = []
-        self.file_size = 0
-        self.offset = 0
-        self.parent_inode = 0
-        self.start_block = 0
-        self.file_size = 0
-        self.i_count = 0
-        self.offset = 0
-
-        self.file_size = 0
-        self.sparse = 0
-        self.index = []
-
-    def _set_values(self, fmt, fields, buff, offset):
-        """Return the amount of bytes read from the buffer."""
-        size = struct.calcsize(fmt)
-        values = struct.unpack_from(fmt, buff, offset)
-        for field, value in zip(fields, values):
-            setattr(self, field, value)
-        return size
-
-    def base_header(self, buff, offset):
-        return self._set_values(self.BASE_FORMAT, self.BASE_FIELDS, buff, offset)
-
-    def ipc_header(self, buff, offset):
-        offset += self.base_header(buff, offset)
-        self._set_values('<I', ["nlink"], buff, offset)
-
-    def lipc_header(self, buff, offset):
-        offset += self.base_header(buff, offset)
-        self._set_values("<II", ["nlink", "xattr"], buff, offset)
-
-    def dev_header(self, buff, offset):
-        offset += self.base_header(buff, offset)
-        self._set_values("<II", ["nlink", "rdev"], buff, offset)
-
-    def ldev_header(self, buff, offset):
-        offset += self.base_header(buff, offset)
-        self._set_values("<III", ["nlink", "rdev", "xattr"], buff, offset)
-
-    def symlink_header(self, buff, offset):
-        offset += self.base_header(buff, offset)
-        offset += self._set_values("<II", ["nlink", "symlink_size"], buff, offset)
-        self.symlink = byt2str(buff[offset : offset + self.symlink_size])
-
-    def reg_header(self, buff, offset):
-        fields = ["start_block", "fragment", "offset", "file_size"]
-        offset += self.base_header(buff, offset)
-        offset += self._set_values("<IIII", fields, buff, offset)
-        self.block_list = buff[offset:]
-        return offset
-
-    def lreg_header(self, buff, offset):
-        fields = [
-            "start_block", "file_size", "sparse", "nlink", "fragment", "offset", "xattr"
-        ]
-        offset += self.base_header(buff, offset)
-        offset += self._set_values("<QQQIIII", fields, buff, offset)
-        self.block_list = buff[offset:]
-        return offset
-
-    def dir_header(self, buff, offset):
-        fields = ["start_block", "nlink", "file_size", "offset", "parent_inode"]
-        offset += self.base_header(buff, offset)
-        self._set_values("<IIHHI", fields, buff, offset)
-
-    def ldir_header(self, buff, offset):
-        fields = [
-            "nlink", "file_size", "start_block", "parent_inode",
-            "i_count", "offset", "xattr"
-        ]
-        offset += self.base_header(buff, offset)
-        offset += self._set_values("<IIIIHHI", fields, buff, offset)
-        self.index = buff[offset:]
-
-
-class _DirEntry(_SquashfsCommons):
-
-    FORMAT = "<HhHH"
-    SIZE = struct.calcsize(FORMAT)
-    FIELDS = ["offset", "inode_number", "type", "size"]
-
-    def __init__(self):
-        self.offset = 0
-        self.inode_number = 0
-        self.type = 0
-        self.size = 0
-        self.name = None
-        self.s_file = None
-
-    @classmethod
-    def from_bytes(cls, buffer, offset=0):
-        # super without arguments is not Python 2 compatible.
-        inst = super(_DirEntry, cls).from_bytes(buffer, offset)
-        offset += cls.SIZE
-        inst.name = byt2str(buffer[offset : offset + inst.size + 1])
-        return inst
-
-
-class _DirHeader(_SquashfsCommons):
-
-    FORMAT = "<III"
-    SIZE = struct.calcsize(FORMAT)
-    FIELDS = ["count", "start_block", "inode_number"]
-
-    def __init__(self):
-        self.count = 0
-        self.start_block = 0
-        self.inode_number = 0
-
-
-class _Dir:
-
-    def __init__(self):
-        self.dir_count = 0
-        self.cur_entry = 0
-        self.mode = 0
-        self.uid = 0
-        self.guid = 0
-        self.mtime = 0
-        self.xattr = 0
-        self.dirs = []
-
-
 class _XattrId(_SquashfsCommons):  # 16
 
     FORMAT = "<QII"
@@ -637,280 +371,7 @@ class _XattrTable(_SquashfsCommons):
         self.unused = 0
 
 
-class SquashedFile:
-
-    def __init__(self, name, parent=None):
-        self._name = name
-        self.children = []
-        self.inode = None
-        self.parent = parent
-
-    def __iter__(self):
-        return self.iterdir()
-
-    @property
-    def is_dir(self):
-        if self.parent is None:
-            return True
-        return self.inode.is_dir if self.inode is not None else False
-
-    @property
-    def is_file(self):
-        return self.inode.is_file if self.inode is not None else False
-
-    @property
-    def is_symlink(self):
-        return self.inode.is_symlink if self.inode is not None else False
-
-    @property
-    def is_block_device(self):
-        return self.inode.is_block_device if self.inode is not None else False
-
-    @property
-    def is_char_device(self):
-        return self.inode.is_char_device if self.inode is not None else False
-
-    @property
-    def is_fifo(self):
-        return self.inode.is_fifo if self.inode is not None else False
-
-    @property
-    def is_socket(self):
-        return self.inode.is_socket if self.inode is not None else False
-
-    @property
-    def name(self):
-        return self._name
-
-    @property
-    def size(self):
-        return self.inode.data
-
-    @property
-    def path(self):
-        if self.parent is None:
-            return '/'
-        else:
-            return posixpath.join(self.parent.path, self._name)
-
-    @property
-    def xattr(self):
-        return self.inode.xattr
-
-    @property
-    def filemode(self):
-        ret = ['-'] * 10
-        if self.inode is not None:
-            if not pyVersionTwo:
-                return stat.filemode(self.inode.mode)
-
-            if self.inode.is_socket:
-                ret[0] = 's'
-            if self.inode.is_symlink:
-                ret[0] = 'l'
-            if self.inode.is_block_device:
-                ret[0] = 'b'
-            if self.inode.is_dir:
-                ret[0] = 'd'
-            if self.inode.is_char_device:
-                ret[0] = 'c'
-            if self.inode.is_fifo:
-                ret[0] = 'p'
-
-            if (self.inode.mode & stat.S_IRUSR) == stat.S_IRUSR:
-                ret[1] = 'r'
-            if (self.inode.mode & stat.S_IWUSR) == stat.S_IWUSR:
-                ret[2] = 'w'
-            if (self.inode.mode & stat.S_IRGRP) == stat.S_IRGRP:
-                ret[4] = 'r'
-            if (self.inode.mode & stat.S_IWGRP) == stat.S_IWGRP:
-                ret[5] = 'w'
-            if (self.inode.mode & stat.S_IROTH) == stat.S_IROTH:
-                ret[7] = 'r'
-            if (self.inode.mode & stat.S_IWOTH) == stat.S_IWOTH:
-                ret[8] = 'w'
-
-            if (self.inode.mode & stat.S_IXUSR) == stat.S_IXUSR:
-                ret[3] = 'x'
-                if (self.inode.mode & stat.S_ISUID) == stat.S_ISUID:
-                    ret[3] = 's'
-            if (self.inode.mode & stat.S_IXGRP) == stat.S_IXGRP:
-                ret[6] = 'x'
-                if (self.inode.mode & stat.S_ISGID) == stat.S_ISGID:
-                    ret[6] = 's'
-            if (self.inode.mode & stat.S_IXOTH) == stat.S_IXOTH:
-                ret[9] = 'x'
-
-        return ''.join(ret)
-
-    def getPath(self):
-        """Deprecated. Use the `path` property instead."""
-        warnings.warn("SquashedFile.getPath() is deprecated. "
-                      "Use the path property instead",
-                      DeprecationWarning, stacklevel=2)
-        return self.path
-
-    def getXattr(self):
-        """Deprecated. Use the `xattr` property instead."""
-        warnings.warn("SquashedFile.getXattr() is deprecated. "
-                      "Use the xattr property instead",
-                      DeprecationWarning, stacklevel=2)
-        return self.xattr
-
-    def find_all(self):
-        ret = [self]
-        for i in self.children:
-            ret += i.find_all()
-        return ret
-
-    def findAll(self):
-        """Deprecated. Use `SquashedFile.find_all()` instead."""
-        warnings.warn("SquashedFile.findAll() is deprecated. "
-                      "Use find_all() instead",
-                      DeprecationWarning, stacklevel=2)
-        return self.find_all()
-
-    def find_all_paths(self):
-        ret = [self.path]
-        for i in self.children:
-            ret += i.find_all_paths()
-        return ret
-
-    def findAllPaths(self):
-        """Deprecated. Use `SquashedFile.find_all_paths()` instead."""
-        warnings.warn("SquashedFile.findAllPaths() is deprecated. "
-                      "Use find_all_paths() instead",
-                      DeprecationWarning, stacklevel=2)
-        return self.find_all_paths()
-
-    def iterdir(self):
-        """If called on a directory, yield its children."""
-        for child in self.children:
-            yield child
-
-    def riter(self):
-        """Iterate over all elements in the subtree."""
-        yield self
-        for child in self.iterdir():
-            for item in child.riter():
-                yield item
-
-    def riterpaths(self):
-        """Iterate over all paths in the subtree."""
-        yield self.path
-        for child in self.iterdir():
-            for path in child.riterpaths():
-                yield path
-
-    def find(self, filename):
-        """Find the first file with this name in the subtree."""
-        for file in self.riter():
-            if file.name == filename:
-                return file
-        return None
-
-    def getContent(self):
-        """Deprecated. Use `SquashedFile.read_bytes()` instead."""
-        warnings.warn("SquashedFile.getContent() is deprecated. "
-                      "Use read_bytes() instead",
-                      DeprecationWarning, stacklevel=2)
-        return self.read_bytes()
-
-    def read_bytes(self):
-        if self.inode is None:
-            return None
-        return self.inode.read_bytes()
-
-    def read(self, path):
-        node = self.select(path)
-        if node is None:
-            return None
-        return node.read_bytes()
-
-    def dirlist(self, path):
-        node = self.select(path)
-        if node is None:
-            return None
-        return node.children
-
-    def select(self, path):
-        if path == "/":
-            path = ''
-        lpath = path.split('/')
-        start = self
-        ofs = 0
-        if not lpath[0]:
-            ofs = 1
-            while start.parent:
-                start = start.parent
-        if ofs >= len(lpath):
-            return start
-        for child in start.children:
-            if child.name == lpath[ofs]:
-                return child._lselect(lpath, ofs + 1)
-        return None
-
-    def _lselect(self, lpath, ofs):
-        # print lpath,self.name,ofs
-        if ofs >= len(lpath):
-            return self
-        for child in self.children:
-            if child.name == lpath[ofs]:
-                return child._lselect(lpath, ofs + 1)
-        return None
-
-    def isFolder(self):
-        """Deprecated. Use the `is_dir` property instead."""
-        warnings.warn("SquashedFile.isFolder() is deprecated. "
-                      "Use the is_dir property instead",
-                      DeprecationWarning, stacklevel=2)
-        return self.is_dir
-
-    def isLink(self):
-        """Deprecated. Use the `is_symlink` property instead."""
-        warnings.warn("SquashedFile.isLink() is deprecated. "
-                      "Use the is_symlink property instead",
-                      DeprecationWarning, stacklevel=2)
-        return self.is_symlink
-
-    def close(self):
-        self.inode.image.close()
-
-    def getLength(self):
-        """Deprecated. Use the `size` property instead."""
-        warnings.warn("SquashedFile.getLength() is deprecated. "
-                      "Use the size property instead",
-                      DeprecationWarning, stacklevel=2)
-        return self.size
-
-    def getName(self):
-        """Deprecated. Use the `name` property instead."""
-        warnings.warn("SquashedFile.getName() is deprecated. "
-                      "Use the name property instead",
-                      DeprecationWarning, stacklevel=2)
-        return self.name
-
-    def readlink(self):
-        if self.inode is None:
-            return None
-        return self.inode.symlink
-
-    def getLink(self):
-        """Deprecated. Use `SquashedFile.readlink()` instead."""
-        warnings.warn("SquashedFile.getLink() is deprecated. "
-                      "Use readlink() instead",
-                      DeprecationWarning, stacklevel=2)
-        return self.readlink()
-
-    def getMode(self):
-        """Deprecated. Use the `filemode` property instead."""
-        warnings.warn("SquashedFile.getMode() is deprecated. "
-                      "Use the filemode property instead",
-                      DeprecationWarning, stacklevel=2)
-        return self.filemode
-
-
-class SquashFsImage(_SquashfsCommons):
+class SquashFsImage(object):
 
     def __init__(self, filepath=None, offset=0):
         self.comp = None
@@ -921,21 +382,13 @@ class SquashFsImage(_SquashfsCommons):
         self.block_log = 0
         self.all_buffers_size = 0
         self.fragment_table = []
-        self.id_table = 0
         self.inode_table_hash = {}
-        self.inode_table = b""
-        self.id_table = []
+        self.id_table = {}
         self.hash_table = {}
         self.xattrs = b""
         self.directory_table_hash = {}
-        self.created_inode = []
-        self.total_blocks = 0
-        self.total_files = 0
-        self.total_inodes = 0
-        self.directory_table = b''
-        self.inode_to_file = {}
-        self._root = SquashedFile("")
-        self.image_file = None
+        self._root = None
+        self._image_file = None
         self.offset = offset
         if filepath is not None:
             self.open(filepath)
@@ -967,9 +420,9 @@ class SquashFsImage(_SquashfsCommons):
         return self.root
 
     def set_file(self, fd):
-        self.image_file = fd
+        self._image_file = fd
         fd.seek(self.offset)
-        self.initialize(self.image_file)
+        self._initialize()
 
     def setFile(self, fd):
         """Deprecated. Use `SquashFsImage.set_file()` instead."""
@@ -979,65 +432,64 @@ class SquashFsImage(_SquashfsCommons):
         self.set_file(fd)
 
     def open(self, filepath):
-        self.image_file = open(filepath, 'rb')
-        self.image_file.seek(self.offset)
-        self.initialize(self.image_file)
+        self._image_file = open(filepath, 'rb')
+        self._image_file.seek(self.offset)
+        self._initialize()
 
     def close(self):
-        self.image_file.close()
-        self.image_file = None
+        self._image_file.close()
+        self._image_file = None
 
-    def __read_super(self, fd):
-        self.sBlk.read(fd)
+    def _read_super(self):
+        self.sBlk.read(self._image_file)
         if self.sBlk.s_magic != SQUASHFS_MAGIC or self.sBlk.s_major != 4 or self.sBlk.s_minor != 0:
             raise IOError("The file supplied is not a squashfs 4.0 image")
-        self.comp = self.get_compressor(self.sBlk.compression)
+        self.comp = self._get_compressor(self.sBlk.compression)
 
-    def get_compressor(self, compression_id):
+    def _get_compressor(self, compression_id):
         if compression_id not in _compressors:
             raise ValueError("Unknown compression method %r" % compression_id)
         return _compressors[compression_id]()
 
-    def initialize(self, myfile):
-        self.__read_super(myfile)
-        self.created_inode = [None] * self.sBlk.inodes
+    def _initialize(self):
+        self._read_super()
         self.block_size = self.sBlk.block_size
         self.block_log = self.sBlk.block_log
         self.fragment_buffer_size <<= 20 - self.block_log
         self.data_buffer_size <<= 20 - self.block_log
         self.all_buffers_size = self.fragment_buffer_size + self.data_buffer_size
-        self.read_uids_guids(myfile)
-        self.read_fragment_table(myfile)
-        self.uncompress_inode_table(myfile, self.sBlk.inode_table_start, self.sBlk.directory_table_start)
-        self.uncompress_directory_table(myfile, self.sBlk.directory_table_start, self.sBlk.fragment_table_start)
-        self.read_xattrs_from_disk(myfile)
+        self._read_uids_guids()
+        self._read_fragment_table()
+        self._read_xattrs_from_disk()
         root_block = SQUASHFS_INODE_BLK(self.sBlk.root_inode)
         root_offs = SQUASHFS_INODE_OFFSET(self.sBlk.root_inode)
-        self.pre_scan("squashfs-root", root_block, root_offs, self._root)
+        self._root = self._dir_scan(root_block, root_offs)
 
-    def read_data_block(self, myfile, start, size):
+    def _read_data_block(self, start, size):
         c_byte = SQUASHFS_COMPRESSED_SIZE_BLOCK(size)
-        myfile.seek(self.offset + start)
-        data = myfile.read(c_byte)
+        self._image_file.seek(self.offset + start)
+        data = self._image_file.read(c_byte)
         if SQUASHFS_COMPRESSED_BLOCK(size):
             return self.comp.uncompress(data)
         else:
             return data
 
     def read_file(self, inode):
+        # unsquashfs.c -> write_file
         start = inode.start
-        content = b""
-        block_list = self.read_block_list(inode)
-        for cur_blk in block_list:
-            if cur_blk == SQUASHFS_INVALID_FRAG:
-                continue
-            c_byte = SQUASHFS_COMPRESSED_SIZE_BLOCK(cur_blk)
-            if cur_blk != 0:  # non sparse file
-                content += self.read_data_block(self.image_file, start, cur_blk)
-                start += c_byte
-        if inode.frag_bytes != 0:
-            start, size = self.read_fragment(inode.fragment)
-            buffer = self.read_data_block(self.image_file, start, size)
+        content = b''
+        if inode.blocks:
+            block_list = self._read_block_list(inode.block_start, inode.block_offset, inode.blocks)
+            for block in block_list:
+                if block == SQUASHFS_INVALID_FRAG:
+                    continue
+                c_byte = SQUASHFS_COMPRESSED_SIZE_BLOCK(block)
+                if block != 0:  # non sparse file
+                    content += self._read_data_block(start, block)
+                    start += c_byte
+        if inode.frag_bytes:
+            start, size = self._read_fragment(inode.fragment)
+            buffer = self._read_data_block(start, size)
             # inode.frag_bytes was (inode.data%self.block_size)
             content += buffer[inode.offset : inode.offset + inode.frag_bytes]
         return content
@@ -1049,214 +501,144 @@ class SquashFsImage(_SquashfsCommons):
                       DeprecationWarning, stacklevel=2)
         return self.read_file(inode)
 
-    def read_block_list(self, inode):
+    def _read_block_list(self, start, offset, blocks):
+        # unsquash-4.c
+        size = 4  # sizeof(unsigned int)
+        idata, _, _ = self._read_inode_data(start, offset, blocks * size)
         ret = []
-        ofs = inode.block_ptr
-        for _ in range(inode.blocks):
-            number, ofs = self.auto_make_buf_integer(self.inode_table, ofs, 4)
-            ret.append(number)
+        ofs = 0
+        for _ in range(blocks):  # use struct.iter_unpack when Py3 only
+            ret.append(self._make_buf_integer(idata, ofs, size))
+            ofs += size
         return ret
 
-    def read_block(self, myfile, start):
-        myfile.seek(self.offset + start)
-        c_byte = self.read_short(myfile)
-        offset = 2
-        if SQUASHFS_CHECK_DATA(self.sBlk.flags):
-            offset = 3
-        myfile.seek(self.offset + start + offset)
+    def _read_block(self, start):
+        """Read a block starting at offset `start` relative to the start of the image.
+
+        Return the uncompressed block and the start of the next compressed one.
+        """
+        self._image_file.seek(self.offset + start)
+        c_byte = self._read_short()
+        offset = 3 if SQUASHFS_CHECK_DATA(self.sBlk.flags) else 2
+        self._image_file.seek(self.offset + start + offset)
         size = SQUASHFS_COMPRESSED_SIZE(c_byte)
-        block = myfile.read(size)
+        block = self._image_file.read(size)
         if SQUASHFS_COMPRESSED(c_byte):
             block = self.comp.uncompress(block)
-        return (block, start + offset + size, size)
+        return block, start + offset + size
 
-    def uncompress_inode_table(self, myfile, start, end):
-        bytes_ = 0
-        while start < end:
-            self.inode_table_hash[start] = bytes_
-            block, start, _ = self.read_block(myfile, start)
-            self.inode_table += block
-            bytes_ = len(self.inode_table)
-
-    def read_fragment_table(self, myfile):
+    def _read_fragment_table(self):
         indexes = SQUASHFS_FRAGMENT_INDEXES(self.sBlk.fragments)
-        fragment_table_index = []
-        self.fragment_table = []
         if self.sBlk.fragments == 0:
             return
-        myfile.seek(self.offset + self.sBlk.fragment_table_start)
-        for _ in range(indexes):
-            fragment_table_index.append(self.read_long(myfile))
-        table = b""
-        for fti in fragment_table_index:
-            table += self.read_block(myfile, fti)[0]
+        self._image_file.seek(self.offset + self.sBlk.fragment_table_start)
+        fragment_table_index = [self._read_long() for _ in range(indexes)]
+        table = b''.join(self._read_block(fti)[0] for fti in fragment_table_index)
         ofs = 0
         while ofs < len(table):
             entry = _SquashfsFragmentEntry.from_bytes(table, ofs)
             ofs += _SquashfsFragmentEntry.SIZE
-            entry.fragment = self.read_data_block(myfile, entry.start_block, entry.size)
+            entry.fragment = self._read_data_block(entry.start_block, entry.size)
             self.fragment_table.append(entry)
 
-    def read_fragment(self, fragment):
+    def _read_fragment(self, fragment):
         entry = self.fragment_table[fragment]
         return (entry.start_block, entry.size)
 
-    def read_inode(self, start_block, offset):
+    def _read_inode(self, start_block, offset):
+        # unsquash-4.c
         start = self.sBlk.inode_table_start + start_block
-        bytes_ = self.inode_table_hash[start]
-        block_ptr = bytes_ + offset
-        i = SquashInode(self)
-        header = _InodeHeader()
-        header.base_header(self.inode_table, block_ptr)
-        i.uid = self.id_table[header.uid]
-        i.gid = self.id_table[header.guid]
-        i.mode = SQASHFS_LOOKUP_TYPE[header.inode_type] | header.mode
-        i.type = header.inode_type
-        i.time = header.mtime
-        i.inode_number = header.inode_number
-        if header.inode_type == SQUASHFS_DIR_TYPE:
-            header.dir_header(self.inode_table, block_ptr)
-            i.data = header.file_size
-            i.offset = header.offset
-            i.start = header.start_block
-            i._xattr = SQUASHFS_INVALID_XATTR
-        elif header.inode_type == SQUASHFS_LDIR_TYPE:
-            header.ldir_header(self.inode_table, block_ptr)
-            i.data = header.file_size
-            i.offset = header.offset
-            i.start = header.start_block
-            i._xattr = header.xattr
-        elif header.inode_type == SQUASHFS_FILE_TYPE:
-            i.block_ptr = header.reg_header(self.inode_table, block_ptr)
-            i.data = header.file_size
-            if header.fragment == SQUASHFS_INVALID_FRAG:
-                i.frag_bytes = 0
-            else:
-                i.frag_bytes = header.file_size % self.sBlk.block_size
-            i.fragment = header.fragment
-            i.offset = header.offset
-            if header.fragment == SQUASHFS_INVALID_FRAG:
-                i.blocks = (i.data + self.sBlk.block_size - 1) >> self.sBlk.block_log
-            else:
-                i.blocks = i.data >> self.sBlk.block_log
-            i.start = header.start_block
-            i.sparse = 0
-            # i.block_ptr = block_ptr + 32 #sizeof(*inode)
-            i._xattr = SQUASHFS_INVALID_XATTR
-        elif header.inode_type == SQUASHFS_LREG_TYPE:
-            i.block_ptr = header.lreg_header(self.inode_table, block_ptr)
-            i.data = header.file_size
-            if header.fragment == SQUASHFS_INVALID_FRAG:
-                i.frag_bytes = 0
-            else:
-                i.frag_bytes = header.file_size % self.sBlk.block_size
-            i.fragment = header.fragment
-            i.offset = header.offset
-            if header.fragment == SQUASHFS_INVALID_FRAG:
-                i.blocks = (header.file_size + self.sBlk.block_size - 1) >> self.sBlk.block_log
-            else:
-                i.blocks = header.file_size >> self.sBlk.block_log
-            i.start = header.start_block
-            i.sparse = header.sparse != 0
-            # i.block_ptr = block_ptr + 60#sizeof(*inode)
-            i._xattr = header.xattr
-        elif header.inode_type in (SQUASHFS_SYMLINK_TYPE, SQUASHFS_LSYMLINK_TYPE):
-            header.symlink_header(self.inode_table, block_ptr)
-            i.symlink = header.symlink
-            i.data = header.symlink_size
-            if header.inode_type == SQUASHFS_LSYMLINK_TYPE:
-                i._xattr = self.make_buf_integer(self.inode_table, block_ptr + 24 + header.symlink_size, 4)
-            else:
-                i._xattr = SQUASHFS_INVALID_XATTR
-        elif header.inode_type in (SQUASHFS_BLKDEV_TYPE, SQUASHFS_CHRDEV_TYPE):
-            header.dev_header(self.inode_table, block_ptr)
-            i.data = header.rdev
-            i._xattr = SQUASHFS_INVALID_XATTR
-        elif header.inode_type in (SQUASHFS_LBLKDEV_TYPE, SQUASHFS_LCHRDEV_TYPE):
-            header.ldev_header(self.inode_table, block_ptr)
-            i.data = header.rdev
-            i._xattr = header.xattr
-        elif header.inode_type in (SQUASHFS_FIFO_TYPE, SQUASHFS_SOCKET_TYPE):
-            i.data = 0
-            i._xattr = SQUASHFS_INVALID_XATTR
-        elif header.inode_type in (SQUASHFS_LFIFO_TYPE, SQUASHFS_LSOCKET_TYPE):
-            header.lipc_header(self.inode_table, block_ptr)
-            i.data = 0
-            i._xattr = header.xattr
-        else:
+        idata, start, offset = self._read_inode_data(start, offset, sizeof(InodeHeader))
+        header = InodeHeader.from_bytes(idata)
+        cls = inomap[header.inode_type]
+        idata, start, offset = self._read_inode_data(start, offset, sizeof(cls))
+        ino = cls.from_bytes(idata)
+        ino._header = header
+        ino._uid = self.id_table[header.uid]
+        ino._gid = self.id_table[header.guid]
+        ino._mode = SQUASHFS_LOOKUP_TYPE[header.inode_type] | header.mode
+        try:
+            inode_type = Type(header.inode_type)
+        except ValueError:
             raise RuntimeError("Unknown inode type %d in read_inode!\n" % header.inode_type)
-        return i
+        if inode_type in (Type.FILE, Type.LREG):
+            ino._block_start = start
+            ino._block_offset = offset
+            if ino.fragment == SQUASHFS_INVALID_FRAG:
+                ino._frag_bytes = 0
+                ino._blocks = (ino.data + self.sBlk.block_size - 1) >> self.sBlk.block_log
+            else:
+                ino._frag_bytes = ino.file_size % self.sBlk.block_size
+                ino._blocks = ino.data >> self.sBlk.block_log
+        elif inode_type in (Type.SYMLINK, Type.LSYMLINK):
+            idata, start, offset = self._read_inode_data(start, offset, ino.symlink_size)
+            ino._symlink = idata
+            if inode_type == Type.LSYMLINK:
+                idata, start, offset = self._read_inode_data(start, offset, 4)
+                ino._xattr = self._make_buf_integer(idata, 0, len(idata))
+        return ino
 
-    def uncompress_directory_table(self, myfile, start, end):
-        while start < end:
-            self.directory_table_hash[start] = len(self.directory_table)
-            block, start, _ = self.read_block(myfile, start)
-            self.directory_table += block
-
-    def squashfs_opendir(self, block_start, offset, s_file):
-        i = self.read_inode(block_start, offset)
-        start = self.sBlk.directory_table_start + i.start
-        bytes_ = self.directory_table_hash[start]
-        bytes_ += i.offset
-        size = i.data + bytes_ - 3
-        self.inode_to_file[i.inode_number] = s_file
-        s_file.inode = i
-        mydir = _Dir()
-        mydir.dir_count = 0
-        mydir.cur_entry = 0
-        mydir.mode = i.mode
-        mydir.uid = i.uid
-        mydir.guid = i.gid
-        mydir.mtime = i.time
-        mydir.xattr = i.xattr
-        mydir.dirs = []
+    def _opendir(self, block_start, offset):
+        # unsquash-4.c -> squashfs_opendir
+        inode = self._read_inode(block_start, offset)
+        directory = Directory(self, inode)
+        directory.entries = []
+        if inode.data == 3:
+            return directory
+        start = self.sBlk.directory_table_start + inode.start
+        offset = inode.offset
+        size = inode.data - 3
+        bytes_ = 0
         while bytes_ < size:
-            dirh = _DirHeader.from_bytes(self.directory_table, bytes_)
-            dir_count = dirh.count + 1
-            bytes_ += _DirHeader.SIZE
-            while dir_count != 0:
-                dire = _DirEntry.from_bytes(self.directory_table, bytes_)
-                dir_count -= 1
-                dire.s_file = SquashedFile(dire.name, s_file)
-                s_file.children.append(dire.s_file)
-                dire.parent = mydir
-                dire.start_block = dirh.start_block
-                mydir.dirs.append(dire)
-                mydir.dir_count += 1
-                bytes_ += _DirEntry.SIZE + dire.size + 1
-        return (mydir, i)
+            ddata, start, offset = self._read_directory_data(start, offset, sizeof(DirHeader))
+            dirh = DirHeader.from_bytes(ddata)
+            bytes_ += sizeof(DirHeader)
+            for _ in range(dirh.count + 1):
+                ddata, start, offset = self._read_directory_data(start, offset, sizeof(DirEntry))
+                dire = DirEntry.from_bytes(ddata)
+                namelen = dire.size + 1
+                ddata, start, offset = self._read_directory_data(start, offset, namelen)
+                dire._name = ddata
+                bytes_ += sizeof(DirEntry) + namelen
+                directory.entries.append({
+                    "name": dire._name,
+                    "start_block": dirh.start_block,
+                    "offset": dire.offset,
+                    "type": dire.type
+                })
+        return directory
 
-    def read_uids_guids(self, myfile):
+    def _read_uids_guids(self):
+        size = 4
         indexes = SQUASHFS_ID_BLOCKS(self.sBlk.no_ids)
         id_index_table = []
-        self.id_table = [None] * self.sBlk.no_ids
-        myfile.seek(self.offset + self.sBlk.id_table_start)
+        self._image_file.seek(self.offset + self.sBlk.id_table_start)
         for _ in range(indexes):
-            id_index_table.append(self.make_integer(myfile, SQUASHFS_ID_BLOCK_BYTES(1)))
+            id_index_table.append(self._make_integer(SQUASHFS_ID_BLOCK_BYTES(1)))
         for i, idx in enumerate(id_index_table):
-            myfile.seek(self.offset + idx)
-            block = self.read_block(myfile, idx)[0]
+            block = self._read_block(idx)[0]
             offset = 0
             index = i * (SQUASHFS_METADATA_SIZE // 4)
             while offset < len(block):
-                self.id_table[index], offset = self.auto_make_buf_integer(block, offset, 4)
+                self.id_table[index] = self._make_buf_integer(block, offset, size)
+                offset += size
                 index += 1
 
-    def read_xattrs_from_disk(self, myfile):
+    def _read_xattrs_from_disk(self):
         id_table = _XattrTable()
         if self.sBlk.xattr_id_table_start == SQUASHFS_INVALID_BLK:
             return SQUASHFS_INVALID_BLK
-        myfile.seek(self.offset + self.sBlk.xattr_id_table_start)
-        id_table.read(myfile)
+        self._image_file.seek(self.offset + self.sBlk.xattr_id_table_start)
+        id_table.read(self._image_file)
         ids = id_table.xattr_ids
         xattr_table_start = id_table.xattr_table_start
         indexes = SQUASHFS_XATTR_BLOCKS(ids)
         index = []
         for _ in range(indexes):
-            index.append(self.make_integer(myfile, SQUASHFS_XATTR_BLOCK_BYTES(1)))
+            index.append(self._make_integer(SQUASHFS_XATTR_BLOCK_BYTES(1)))
         xattr_ids = {}
         for i, idx in enumerate(index):
-            block = self.read_block(myfile, idx)[0]
+            block = self._read_block(idx)[0]
             cur_idx = (i * SQUASHFS_METADATA_SIZE) / 16
             ofs = 0
             while ofs < len(block):
@@ -1264,47 +646,98 @@ class SquashFsImage(_SquashfsCommons):
                 cur_idx += 1
                 ofs += _XattrId.SIZE
         start = xattr_table_start
-        end = index[0]
         i = 0
-        while start < end:
+        while start < index[0]:
             self.hash_table[start] = i * SQUASHFS_METADATA_SIZE
-            block, start, _ = self.read_block(myfile, start)
+            block, start = self._read_block(start)
             for i in range(len(block), SQUASHFS_METADATA_SIZE):
                 block += b'\x00'
             self.xattrs += block
             i += 1
         return ids
 
-    def pre_scan(self, parent_name, start_block, offset, parent):
-        mydir, i = self.squashfs_opendir(start_block, offset, parent)
-        while mydir.cur_entry < mydir.dir_count:
-            dir_entry = mydir.dirs[mydir.cur_entry]
-            start_block = dir_entry.start_block
-            offset = dir_entry.offset
-            objtype = dir_entry.type
-            parent = dir_entry.s_file
-            mydir.cur_entry += 1
-            if objtype == SQUASHFS_DIR_TYPE:
-                self.pre_scan(parent_name, start_block, offset, parent)
+    def _dir_scan(self, start_block, offset):
+        directory = self._opendir(start_block, offset)
+        for entry in directory.entries:  # No need for squashfs_readdir()
+            start_block = entry["start_block"]
+            offset = entry["offset"]
+            if entry["type"] == Type.DIR:
+                subdir = self._dir_scan(start_block, offset)
+                subdir._parent = directory
+                subdir._name = entry["name"]
+                directory.children[subdir.name] = subdir
             else:
-                if objtype in [SQUASHFS_FILE_TYPE, SQUASHFS_LREG_TYPE, SQUASHFS_SYMLINK_TYPE, SQUASHFS_LSYMLINK_TYPE]:
-                    i = self.read_inode(start_block, offset)
-                    if self.created_inode[i.inode_number - 1] is None:
-                        self.created_inode[i.inode_number - 1] = i
-                        self.total_blocks += (i.data + (self.block_size - 1)) >> self.block_log
-                    self.total_files += 1
-                self.total_inodes += 1
-                self.inode_to_file[i.inode_number] = dir_entry.s_file
-                dir_entry.s_file.inode = i
-        return mydir
+                inode = self._read_inode(start_block, offset)
+                cls = filetype[entry["type"]]
+                file = cls(self, inode, entry["name"], directory)
+                directory.children[file.name] = file
+        del directory.entries
+        return directory
+
+    def _make_integer(self, length):
+        """Assemble multibyte integer."""
+        return self._make_buf_integer(self._image_file.read(length), 0, length)
+
+    def _make_buf_integer(self, buf, start, length):
+        """Assemble multibyte integer."""
+        if sys.version_info < (3, 2):
+            ret = 0
+            pwr = 1
+            for i in range(start, start + length):
+                ret += (ord(buf[i]) & 0xFF) * pwr
+                pwr *= 0x100
+            return ret
+        else:
+            return int.from_bytes(buf[start : start + length], byteorder='little')
+
+    def _read_integer(self, fmt):
+        return struct.unpack(fmt, self._image_file.read(struct.calcsize(fmt)))[0]
+
+    def _read_short(self):
+        return self._read_integer("<H")
+
+    def _read_long(self):
+        return self._read_integer("<Q")
+
+    def _get_metadata(self, hash_table, start):
+        try:
+            return hash_table[start]
+        except KeyError:
+            hash_table[start] = dict(zip(("buffer", "next_index"), self._read_block(start)))
+            return hash_table[start]
+
+    def _read_metadata(self, hash_table, block, offset, length):
+        data = b''
+        while True:
+            entry = self._get_metadata(hash_table, block)
+            copy = len(entry["buffer"]) - offset
+            if copy < length:
+                data += entry["buffer"][offset:]
+                length -= copy
+                block = entry["next_index"]
+                offset = 0
+            elif copy == length:
+                data += entry["buffer"][offset : offset + length]
+                return data, entry["next_index"], 0
+            else:
+                data += entry["buffer"][offset : offset + length]
+                return data, block, offset + length
+
+    def _read_inode_data(self, block, offset, length):
+        return self._read_metadata(self.inode_table_hash, block, offset, length)
+
+    def _read_directory_data(self, block, offset, length):
+        return self._read_metadata(self.directory_table_hash, block, offset, length)
 
     def find(self, filename):
         return self._root.find(filename)
 
+    def select(self, path):
+        return self._root.select(path)
+
 
 def main():
     import argparse
-    import sys
 
     parser = argparse.ArgumentParser(description="Print information about squashfs images.")
     parser.add_argument("file", help="squashfs filesystem")
@@ -1315,14 +748,13 @@ def main():
     image = SquashFsImage(args.file)
     if len(sys.argv) > 1:
         for path in args.paths:
-            sqashed_filename = path
-            squashed_file = image.root.select(sqashed_filename)
-            print("--------------%-50.50s --------------" % sqashed_filename)
+            print("--------------%-50.50s --------------" % path)
+            squashed_file = image.root.select(path)
             if squashed_file is None:
                 print("NOT FOUND")
             elif squashed_file.is_dir:
                 print("FOLDER " + squashed_file.path)
-                for child in squashed_file.children:
+                for child in squashed_file.iterdir():
                     if child.is_dir:
                         print("\t%s %-60s  <dir> " % (child.filemode, child.name))
                     elif child.is_symlink:
@@ -1336,7 +768,7 @@ def main():
             nodetype = "FILE  "
             if i.is_dir:
                 nodetype = "FOLDER"
-            print(nodetype + ' ' + i.path + " inode=" + i.inode.inode_number + " (" + image.read_block_list(i.inode) + " + " + i.inode.offset + ")")
+            # print(nodetype + ' ' + i.path + " inode=" + i.inode.inode_number + " (" + image._read_block_list(i.inode) + " + " + i.inode.offset + ")")
 
         for i in image.root.find_all():
             if i.name.endswith(".ini"):

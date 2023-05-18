@@ -1,6 +1,6 @@
 PySquashfsImage is a lightweight library for reading squashfs image files in Python.
 It provides a way to read squashfs images header and to retrieve encapsulated binaries.
-It is compatible with Python 2.6, 2.7 and Python 3.1+.
+It is compatible with Python 2.7 and Python 3.1+.
 
 ## Installation
 
@@ -33,8 +33,8 @@ from PySquashfsImage import SquashFsImage
 
 # Use with a context manager (recommended).
 with SquashFsImage('/path/to/my/image.img') as image:
-    for path in image.root.riterpaths():
-        print(path)
+    for file in image:
+        print(file.path)
 ```
 
 ### Print only files:
