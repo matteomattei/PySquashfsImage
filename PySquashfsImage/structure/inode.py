@@ -160,14 +160,7 @@ class _BaseInode(_Base):
         return stat.S_ISSOCK(self._mode)
 
 
-class DirectoryInode(_BaseInode):
-    _fields_ = [
-        ("_start_block", c_uint32),
-        ("_nlink", c_uint32),
-        ("_file_size", c_uint16),
-        ("_offset", c_uint16),
-        ("_parent_inode", c_uint32),
-    ]
+class _DirectoryInodeCommon:
 
     @property
     def start_block(self):
@@ -200,7 +193,17 @@ class DirectoryInode(_BaseInode):
         return self.start_block
 
 
-class ExtendedDirectoryInode(DirectoryInode):
+class DirectoryInode(_DirectoryInodeCommon, _BaseInode):
+    _fields_ = [
+        ("_start_block", c_uint32),
+        ("_nlink", c_uint32),
+        ("_file_size", c_uint16),
+        ("_offset", c_uint16),
+        ("_parent_inode", c_uint32),
+    ]
+
+
+class ExtendedDirectoryInode(_DirectoryInodeCommon, _BaseInode):
     _fields_ = [
         ("_nlink", c_uint32),
         ("_file_size", c_uint32),
@@ -221,13 +224,8 @@ class ExtendedDirectoryInode(DirectoryInode):
         return self._index
 
 
-class RegularFileInode(_BaseInode):
-    _fields_ = [
-        ("_start_block", c_uint32),
-        ("_fragment", c_uint32),
-        ("_offset", c_uint32),
-        ("_file_size", c_uint32),
-    ]
+class _RegularFileInodeCommon:
+
     _block_list = None
     _frag_bytes = None
     _blocks = None
@@ -286,7 +284,16 @@ class RegularFileInode(_BaseInode):
         return self._sparse
 
 
-class ExtendedRegularFileInode(RegularFileInode):
+class RegularFileInode(_RegularFileInodeCommon, _BaseInode):
+    _fields_ = [
+        ("_start_block", c_uint32),
+        ("_fragment", c_uint32),
+        ("_offset", c_uint32),
+        ("_file_size", c_uint32),
+    ]
+
+
+class ExtendedRegularFileInode(_RegularFileInodeCommon, _BaseInode):
     _fields_ = [
         ("_start_block", c_uint64),
         ("_file_size", c_uint64),
@@ -359,8 +366,6 @@ class _DeviceInode(_BaseInode):
 
 class _ExtendedDeviceInode(_DeviceInode):
     _fields_ = [
-        ("_nlink", c_uint32),
-        ("_rdev", c_uint32),
         ("_xattr", c_uint32),
     ]
 
@@ -393,7 +398,6 @@ class _IPCInode(_BaseInode):
 
 class _ExtendedIPCInode(_IPCInode):
     _fields_ = [
-        ("_nlink", c_uint32),
         ("_xattr", c_uint32),
     ]
 
