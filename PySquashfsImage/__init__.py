@@ -41,13 +41,16 @@ from .macro import (
     SQUASHFS_COMPRESSED_BLOCK,
     SQUASHFS_COMPRESSED_SIZE,
     SQUASHFS_COMPRESSED_SIZE_BLOCK,
+    SQUASHFS_FRAGMENT_BYTES,
     SQUASHFS_FRAGMENT_INDEXES,
     SQUASHFS_ID_BLOCK_BYTES,
     SQUASHFS_ID_BLOCKS,
+    SQUASHFS_ID_BYTES,
     SQUASHFS_INODE_BLK,
     SQUASHFS_INODE_OFFSET,
     SQUASHFS_XATTR_BLOCK_BYTES,
     SQUASHFS_XATTR_BLOCKS,
+    SQUASHFS_XATTR_BYTES,
 )
 from .structure import DirEntry, DirHeader
 from .structure.inode import InodeHeader, inomap
@@ -258,7 +261,7 @@ class SquashFsImage(object):
         self._image_file.seek(self.offset + start)
         data = self._image_file.read(c_byte)
         if SQUASHFS_COMPRESSED_BLOCK(size):
-            return self.comp.uncompress(data)
+            return self.comp.uncompress(data, c_byte, self.block_size)
         else:
             return data
 
@@ -300,7 +303,7 @@ class SquashFsImage(object):
             ofs += size
         return ret
 
-    def _read_block(self, start):
+    def _read_block(self, start, expected=SQUASHFS_METADATA_SIZE):
         """Read a block starting at offset `start` relative to the start of the image.
 
         Return the uncompressed block and the start of the next compressed one.
@@ -312,16 +315,23 @@ class SquashFsImage(object):
         size = SQUASHFS_COMPRESSED_SIZE(c_byte)
         block = self._image_file.read(size)
         if SQUASHFS_COMPRESSED(c_byte):
-            block = self.comp.uncompress(block)
+            block = self.comp.uncompress(block, size, expected)
         return block, start + offset + size
 
     def _read_fragment_table(self):
+        bytes_ = SQUASHFS_FRAGMENT_BYTES(self.sBlk.fragments)
         indexes = SQUASHFS_FRAGMENT_INDEXES(self.sBlk.fragments)
         if self.sBlk.fragments == 0:
             return
         self._image_file.seek(self.offset + self.sBlk.fragment_table_start)
         fragment_table_index = [self._read_long() for _ in range(indexes)]
-        table = b''.join(self._read_block(fti)[0] for fti in fragment_table_index)
+        table = b''
+        for i, index in enumerate(fragment_table_index):
+            if (i + 1) != indexes:
+                expected = SQUASHFS_METADATA_SIZE
+            else:
+                expected = bytes_ & (SQUASHFS_METADATA_SIZE - 1)
+            table += self._read_block(index, expected)[0]
         ofs = 0
         while ofs < len(table):
             entry = _SquashfsFragmentEntry.from_bytes(table, ofs)
@@ -330,6 +340,7 @@ class SquashFsImage(object):
             self.fragment_table.append(entry)
 
     def _read_fragment(self, fragment):
+        # unsquash-4.c
         entry = self.fragment_table[fragment]
         return (entry.start_block, entry.size)
 
@@ -398,13 +409,18 @@ class SquashFsImage(object):
 
     def _read_uids_guids(self):
         size = 4
+        bytes_ = SQUASHFS_ID_BYTES(self.sBlk.no_ids)
         indexes = SQUASHFS_ID_BLOCKS(self.sBlk.no_ids)
         id_index_table = []
         self._image_file.seek(self.offset + self.sBlk.id_table_start)
         for _ in range(indexes):
             id_index_table.append(self._make_integer(SQUASHFS_ID_BLOCK_BYTES(1)))
         for i, idx in enumerate(id_index_table):
-            block = self._read_block(idx)[0]
+            if (i + 1) != indexes:
+                expected = SQUASHFS_METADATA_SIZE
+            else:
+                expected = bytes_ & (SQUASHFS_METADATA_SIZE - 1)
+            block = self._read_block(idx, expected)[0]
             offset = 0
             index = i * (SQUASHFS_METADATA_SIZE // 4)
             while offset < len(block):
@@ -413,6 +429,7 @@ class SquashFsImage(object):
                 index += 1
 
     def _read_xattrs_from_disk(self):
+        # read_xattrs.c
         id_table = _XattrTable()
         if self.sBlk.xattr_id_table_start == SQUASHFS_INVALID_BLK:
             return SQUASHFS_INVALID_BLK
@@ -424,9 +441,14 @@ class SquashFsImage(object):
         index = []
         for _ in range(indexes):
             index.append(self._make_integer(SQUASHFS_XATTR_BLOCK_BYTES(1)))
+        bytes_ = SQUASHFS_XATTR_BYTES(ids)
         xattr_ids = {}
         for i, idx in enumerate(index):
-            block = self._read_block(idx)[0]
+            if (i + 1) != indexes:
+                expected = SQUASHFS_METADATA_SIZE
+            else:
+                expected = bytes_ & (SQUASHFS_METADATA_SIZE - 1)
+            block = self._read_block(idx, expected)[0]
             cur_idx = (i * SQUASHFS_METADATA_SIZE) / 16
             ofs = 0
             while ofs < len(block):
