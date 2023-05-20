@@ -1,4 +1,4 @@
-from .const import LZ4_COMPRESSION, NO_COMPRESSION, XZ_COMPRESSION, ZLIB_COMPRESSION, ZSTD_COMPRESSION
+from .const import LZ4_COMPRESSION, LZO_COMPRESSION, NO_COMPRESSION, XZ_COMPRESSION, ZLIB_COMPRESSION, ZSTD_COMPRESSION
 
 
 class Compressor:
@@ -17,6 +17,17 @@ class ZlibCompressor(Compressor):
 
     def uncompress(self, src, size, outsize):
         return self._lib.decompress(src)
+
+
+class LZOCompressor(Compressor):
+    name = "lzo"
+
+    def __init__(self):
+        import lzo
+        self._lib = lzo
+
+    def uncompress(self, src, size, outsize):
+        return self._lib.decompress(src, False, outsize)
 
 
 class XZCompressor(Compressor):
@@ -58,6 +69,7 @@ class ZSTDCompressor(Compressor):
 compressors = {
     NO_COMPRESSION: Compressor,
     ZLIB_COMPRESSION: ZlibCompressor,
+    LZO_COMPRESSION: LZOCompressor,
     XZ_COMPRESSION: XZCompressor,
     LZ4_COMPRESSION: LZ4Compressor,
     ZSTD_COMPRESSION: ZSTDCompressor

@@ -8,12 +8,18 @@ It is compatible with Python 2.7 and Python 3.1+.
 pip install PySquashfsImage
 ```
 
-If you are using Python <= 3.2 and need LZMA decompression, install
-[backports.lzma](https://pypi.org/project/backports.lzma/).
+### Compression
 
-For LZ4 decompression, install [lz4](https://pypi.org/project/lz4/) (Python 3.7+).
+Supported compression methods:
 
-For Zstandard decompression install [zstandard](https://pypi.org/project/zstandard/) (Python 3.7+).
+- Gzip
+- [LZO](https://pypi.org/project/python-lzo/)
+- [LZ4](https://pypi.org/project/lz4/)
+- [XZ](https://pypi.org/project/backports.lzma/) (only for Python < 3.3)
+- [Zstandard](https://pypi.org/project/zstandard/)
+
+Some of them require a third-party library that you'll need to install
+separately if needed.
 
 ## Use as a library
 
