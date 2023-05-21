@@ -268,20 +268,24 @@ class SquashFsImage(object):
     def read_file(self, inode):
         # unsquashfs.c -> write_file
         start = inode.start
+        file_end = inode.data // self.block_size
         content = b''
         if inode.blocks:
             block_list = self._read_block_list(inode.block_start, inode.block_offset, inode.blocks)
-            for block in block_list:
+            for i, block in enumerate(block_list):
                 if block == SQUASHFS_INVALID_FRAG:
                     continue
-                c_byte = SQUASHFS_COMPRESSED_SIZE_BLOCK(block)
-                if block != 0:  # non sparse file
+                if block:  # non sparse file
                     content += self._read_data_block(start, block)
-                    start += c_byte
+                    start += SQUASHFS_COMPRESSED_SIZE_BLOCK(block)
+                else:
+                    if i == file_end:
+                        content += b'\x00' * (inode.data & (self.block_size - 1))
+                    else:
+                        content += b'\x00' * self.block_size
         if inode.frag_bytes:
             start, size = self._read_fragment(inode.fragment)
             buffer = self._read_data_block(start, size)
-            # inode.frag_bytes was (inode.data%self.block_size)
             content += buffer[inode.offset : inode.offset + inode.frag_bytes]
         return content
 
