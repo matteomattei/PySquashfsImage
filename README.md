@@ -67,6 +67,12 @@ with SquashFsImage('/path/to/my/image.img') as image:
         with open('/tmp/' + myfile.name, 'wb') as f:
             print('Saving original ' + myfile.path + ' in /tmp/' + myfile.name)
             f.write(myfile.read_bytes())
+
+    # If the file is large it's preferable to iterate over its content.
+    hugefile = image.select("/hugedir/myhugefile.big")
+    with open("myhugefile.big", "wb") as f:
+        for block in hugefile.iter_bytes():
+            f.write(block)
 ```
 
 ## Use as a command

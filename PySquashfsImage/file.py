@@ -216,6 +216,9 @@ class RegularFile(File):
     def is_file(self):
         return True
 
+    def iter_bytes(self):
+        return self._image.iter_file(self._inode)
+
     def read_bytes(self):
         return self._image.read_file(self._inode)
 
