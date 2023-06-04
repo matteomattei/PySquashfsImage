@@ -134,3 +134,11 @@ def SQUASHFS_XATTR_BLK(A):
 
 def SQUASHFS_XATTR_OFFSET(A):
     return A & 0xFFFF
+
+
+def LOOKUP_INDEX(NUMBER):
+    return NUMBER >> 12
+
+
+def LOOKUP_OFFSET(NUMBER):
+    return NUMBER & 0xFFF
