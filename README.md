@@ -27,7 +27,7 @@ separately if needed.
 ```python
 from PySquashfsImage import SquashFsImage
 
-image = SquashFsImage('/path/to/my/image.img')
+image = SquashFsImage.from_file('/path/to/my/image.img')
 for item in image:
     print(item.name)
 image.close()
@@ -38,7 +38,7 @@ image.close()
 from PySquashfsImage import SquashFsImage
 
 # Use with a context manager (recommended).
-with SquashFsImage('/path/to/my/image.img') as image:
+with SquashFsImage.from_file('/path/to/my/image.img') as image:
     for file in image:
         print(file.path)
 ```
@@ -61,7 +61,7 @@ with SquashFsImage.from_bytes(imgbytes) as image:
 ```python
 from PySquashfsImage import SquashFsImage
 
-with SquashFsImage('/path/to/my/image.img') as image:
+with SquashFsImage.from_file('/path/to/my/image.img') as image:
     myfile = image.find('myfilename')
     if myfile is not None:
         with open('/tmp/' + myfile.name, 'wb') as f:

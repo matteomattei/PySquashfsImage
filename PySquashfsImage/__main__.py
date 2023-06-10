@@ -13,7 +13,7 @@ def main():
     parser.add_argument("-V", "--version", action="version", version="%(prog)s v0.8.0")
     args = parser.parse_args()
 
-    image = SquashFsImage(args.file)
+    image = SquashFsImage.from_file(args.file)
     if len(sys.argv) > 1:
         for path in args.paths:
             print("--------------%-50.50s --------------" % path)

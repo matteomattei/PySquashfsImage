@@ -163,7 +163,10 @@ class _XattrTable(_SquashfsCommons):
 
 class SquashFsImage(object):
 
-    def __init__(self, filepath=None, offset=0):
+    def __init__(self, fd, offset=0, closefd=True):
+        self._fd = fd
+        self._offset = offset
+        self._closefd = closefd
         self.comp = None
         self.sBlk = _SquashfsSuperBlock()
         self.fragment_buffer_size = FRAGMENT_BUFFER_DEFAULT
@@ -178,16 +181,14 @@ class SquashFsImage(object):
         self.xattrs = b""
         self.directory_table_hash = {}
         self._root = None
-        self._image_file = None
-        self.offset = offset
-        if filepath is not None:
-            self.open(filepath)
+        self._initialize()
 
     def __enter__(self):
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
-        self.close()
+        if self._closefd:
+            self.close()
 
     def __iter__(self):
         return self._root.riter()
@@ -198,26 +199,18 @@ class SquashFsImage(object):
 
     @classmethod
     def from_bytes(cls, bytes_, offset=0):
-        self = cls(offset=offset)
-        self.set_file(io.BytesIO(bytes_))
-        return self
-
-    def set_file(self, fd):
-        self._image_file = fd
-        fd.seek(self.offset)
-        self._initialize()
-
-    def open(self, filepath):
-        self._image_file = open(filepath, 'rb')
-        self._image_file.seek(self.offset)
-        self._initialize()
+        return cls(io.BytesIO(bytes_), offset)
+    
+    @classmethod
+    def from_file(cls, path, offset=0):
+        return cls(open(path, "rb"), offset)
 
     def close(self):
-        self._image_file.close()
-        self._image_file = None
+        self._fd.close()
+        self._fd = None
 
     def _read_super(self):
-        self.sBlk.read(self._image_file)
+        self.sBlk.read(self._fd)
         if self.sBlk.s_magic != SQUASHFS_MAGIC or self.sBlk.s_major != 4 or self.sBlk.s_minor != 0:
             raise IOError("The file supplied is not a squashfs 4.0 image")
         self.comp = self._get_compressor(self.sBlk.compression)
@@ -228,6 +221,7 @@ class SquashFsImage(object):
         return compressors[compression_id]()
 
     def _initialize(self):
+        self._fd.seek(self._offset)
         self._read_super()
         self.block_size = self.sBlk.block_size
         self.block_log = self.sBlk.block_log
@@ -243,8 +237,8 @@ class SquashFsImage(object):
 
     def _read_data_block(self, start, size):
         c_byte = SQUASHFS_COMPRESSED_SIZE_BLOCK(size)
-        self._image_file.seek(self.offset + start)
-        data = self._image_file.read(c_byte)
+        self._fd.seek(self._offset + start)
+        data = self._fd.read(c_byte)
         if SQUASHFS_COMPRESSED_BLOCK(size):
             return self.comp.uncompress(data, c_byte, self.block_size)
         else:
@@ -291,12 +285,12 @@ class SquashFsImage(object):
 
         Return the uncompressed block and the start of the next compressed one.
         """
-        self._image_file.seek(self.offset + start)
+        self._fd.seek(self._offset + start)
         c_byte = self._read_short()
         offset = 3 if SQUASHFS_CHECK_DATA(self.sBlk.flags) else 2
-        self._image_file.seek(self.offset + start + offset)
+        self._fd.seek(self._offset + start + offset)
         size = SQUASHFS_COMPRESSED_SIZE(c_byte)
-        block = self._image_file.read(size)
+        block = self._fd.read(size)
         if SQUASHFS_COMPRESSED(c_byte):
             block = self.comp.uncompress(block, size, expected)
         return block, start + offset + size
@@ -306,7 +300,7 @@ class SquashFsImage(object):
         indexes = SQUASHFS_FRAGMENT_INDEXES(self.sBlk.fragments)
         if self.sBlk.fragments == 0:
             return
-        self._image_file.seek(self.offset + self.sBlk.fragment_table_start)
+        self._fd.seek(self._offset + self.sBlk.fragment_table_start)
         fragment_table_index = [self._read_long() for _ in range(indexes)]
         table = b''
         for i, index in enumerate(fragment_table_index):
@@ -395,7 +389,7 @@ class SquashFsImage(object):
         bytes_ = SQUASHFS_ID_BYTES(self.sBlk.no_ids)
         indexes = SQUASHFS_ID_BLOCKS(self.sBlk.no_ids)
         id_index_table = []
-        self._image_file.seek(self.offset + self.sBlk.id_table_start)
+        self._fd.seek(self._offset + self.sBlk.id_table_start)
         for _ in range(indexes):
             id_index_table.append(self._make_integer(SQUASHFS_ID_BLOCK_BYTES(1)))
         for i, idx in enumerate(id_index_table):
@@ -416,8 +410,8 @@ class SquashFsImage(object):
         id_table = _XattrTable()
         if self.sBlk.xattr_id_table_start == SQUASHFS_INVALID_BLK:
             return SQUASHFS_INVALID_BLK
-        self._image_file.seek(self.offset + self.sBlk.xattr_id_table_start)
-        id_table.read(self._image_file)
+        self._fd.seek(self._offset + self.sBlk.xattr_id_table_start)
+        id_table.read(self._fd)
         ids = id_table.xattr_ids
         xattr_table_start = id_table.xattr_table_start
         indexes = SQUASHFS_XATTR_BLOCKS(ids)
@@ -469,7 +463,7 @@ class SquashFsImage(object):
 
     def _make_integer(self, length):
         """Assemble multibyte integer."""
-        return self._make_buf_integer(self._image_file.read(length), 0, length)
+        return self._make_buf_integer(self._fd.read(length), 0, length)
 
     def _make_buf_integer(self, buf, start, length):
         """Assemble multibyte integer."""
@@ -484,7 +478,7 @@ class SquashFsImage(object):
             return int.from_bytes(buf[start : start + length], byteorder='little')
 
     def _read_integer(self, fmt):
-        return struct.unpack(fmt, self._image_file.read(struct.calcsize(fmt)))[0]
+        return struct.unpack(fmt, self._fd.read(struct.calcsize(fmt)))[0]
 
     def _read_short(self):
         return self._read_integer("<H")
