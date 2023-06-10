@@ -21,7 +21,6 @@ import io
 import stat
 import struct
 import sys
-import warnings
 from ctypes import sizeof
 
 from .compressor import compressors
@@ -203,24 +202,10 @@ class SquashFsImage(object):
         self.set_file(io.BytesIO(bytes_))
         return self
 
-    def getRoot(self):
-        """Deprecated. Use the `root` property instead."""
-        warnings.warn("SquashFsImage.getRoot() is deprecated. "
-                      "Use the root property instead",
-                      DeprecationWarning, stacklevel=2)
-        return self.root
-
     def set_file(self, fd):
         self._image_file = fd
         fd.seek(self.offset)
         self._initialize()
-
-    def setFile(self, fd):
-        """Deprecated. Use `SquashFsImage.set_file()` instead."""
-        warnings.warn("SquashFsImage.setFile() is deprecated. "
-                      "Use set_file() instead",
-                      DeprecationWarning, stacklevel=2)
-        self.set_file(fd)
 
     def open(self, filepath):
         self._image_file = open(filepath, 'rb')
@@ -289,13 +274,6 @@ class SquashFsImage(object):
 
     def read_file(self, inode):
         return b''.join(self.iter_file(inode))
-
-    def getFileContent(self, inode):
-        """Deprecated. Use `SquashFsImage.read_file()` instead."""
-        warnings.warn("SquashFsImage.getFileContent() is deprecated. "
-                      "Use read_file() instead",
-                      DeprecationWarning, stacklevel=2)
-        return self.read_file(inode)
 
     def _read_block_list(self, start, offset, blocks):
         # unsquash-4.c
