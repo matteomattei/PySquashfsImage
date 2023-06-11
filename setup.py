@@ -47,7 +47,7 @@ setup(
     ],
     entry_points={
         "console_scripts": [
-            "pysquashfsimage = PySquashfsImage.__main__:main",
+            "pysquashfs = PySquashfsImage.__main__:main",
         ]
     }
 )

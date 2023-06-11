@@ -77,25 +77,76 @@ with SquashFsImage.from_file('/path/to/my/image.img') as image:
 
 ## Use as a command
 
+### List
+
 ```
-$ pysquashfsimage -h
-usage: pysquashfsimage [-h] [-V] file paths [paths ...]
+$ pysquashfs list -h
+usage: pysquashfs list [-h] [-o OFFSET] [-p PATH] [-r] [-t TYPE [TYPE ...]] file
+
+List the contents of the file system
 
 positional arguments:
-  file           squashfs filesystem
-  paths          directories or files to print information about
+  file                        squashfs filesystem
 
-options:
-  -h, --help     show this help message and exit
-  -V, --version  show program's version number and exit
+optional arguments:
+  -h, --help                  show this help message and exit
+  -o OFFSET, --offset OFFSET  absolute position of file system's start. Default: 0
+  -p PATH, --path PATH        absolute path of directory or file to list. Default: '/'
+  -r, --recursive             whether to list recursively. For the root directory the value is inverted. Default: False
+  -t TYPE [TYPE ...], --type TYPE [TYPE ...]
+                              when listing a directory, filter by file type with f, d, l, p, s, b, c
 ```
 
-For each path, if it is a directory it will print the mode and name of each
-contained file, with sizes and symlinks.
+Similar to `unsquashfs -ll -full`.
 
-If a path is a file, print its content.
-
-Example command:
+Example that only lists directories under the root directory:
 ```
-$ pysquashfsimage myimage.img /bin /etc/passwd
+$ pysquashfs list myimage.img -r -t d
+drwxrwxrwx 1049/1049               468 2018-10-10 08:14:16 /bin
+drwxrwxrwx 1049/1049                 3 2021-05-14 18:46:17 /dev
+drwxrwxrwx 1049/1049               869 2019-11-12 09:31:30 /etc
+drwxrwxrwx 1049/1049                 3 2021-05-14 18:46:17 /home
+drwxrwxrwx 1049/1049               406 2017-12-11 08:14:16 /lib
+drwxrwxrwx 1049/1049                98 2021-05-14 18:46:17 /mnt
+drwxrwxrwx 1049/1049                 3 2021-05-14 15:12:17 /proc
+drwxrwxrwx 1049/1049                 3 2021-05-14 15:12:17 /root
+drwxrwxrwx 1049/1049               690 2021-05-14 12:11:44 /sbin
+drwxrwxrwx 1049/1049                 3 2021-05-14 15:12:17 /sys
+drwxrwxrwx 1049/1049                 3 2021-05-14 18:46:17 /tmp
+drwxrwxrwx 1049/1049               364 2021-05-14 18:46:17 /usr
+drwxrwxrwx 1049/1049                60 2018-11-09 05:38:43 /var
+13 file(s) found
+```
+
+### Extract
+
+```
+$ pysquashfs extract -h
+usage: pysquashfs extract [-h] [-o OFFSET] [-d DEST] [-p PATH] [-f] [-q] file
+
+Extract files from the file system
+
+positional arguments:
+  file                        squashfs filesystem
+
+optional arguments:
+  -h, --help                  show this help message and exit
+  -o OFFSET, --offset OFFSET  absolute position of file system's start. Default: 0
+  -d DEST, --dest DEST        directory that will contain the extracted file(s). If it doesn't exist it will be created. Default: current directory
+  -p PATH, --path PATH        absolute path of directory or file to extract. Default: '/'
+  -f, --force                 overwrite files that already exist. Default: False
+  -q, --quiet                 don't print extraction status. Default: False
+```
+
+On Unix, this command tries to give the same output as `unsquashfs`, but should
+not be preferred over it. Some features like extended attributes are missing.
+
+On Windows, you might create symlinks with a privileged account or with an
+unprivileged one if Developer Mode is enabled.
+Otherwise, a regular file containing the target will be created.
+Special files are ignored.
+
+Example command that will extract `/bin` under `/tmp`:
+```
+$ pysquashfs extract myimage.img -p /bin -d /tmp
 ```
