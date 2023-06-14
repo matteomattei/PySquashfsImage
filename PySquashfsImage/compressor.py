@@ -1,4 +1,4 @@
-from .const import LZ4_COMPRESSION, LZO_COMPRESSION, NO_COMPRESSION, XZ_COMPRESSION, ZLIB_COMPRESSION, ZSTD_COMPRESSION
+from .const import Compression
 
 
 class Compressor:
@@ -67,10 +67,10 @@ class ZSTDCompressor(Compressor):
 
 
 compressors = {
-    NO_COMPRESSION: Compressor,
-    ZLIB_COMPRESSION: ZlibCompressor,
-    LZO_COMPRESSION: LZOCompressor,
-    XZ_COMPRESSION: XZCompressor,
-    LZ4_COMPRESSION: LZ4Compressor,
-    ZSTD_COMPRESSION: ZSTDCompressor
+    Compression.NO: Compressor,
+    Compression.ZLIB: ZlibCompressor,
+    Compression.LZO: LZOCompressor,
+    Compression.XZ: XZCompressor,
+    Compression.LZ4: LZ4Compressor,
+    Compression.ZSTD: ZSTDCompressor
 }
