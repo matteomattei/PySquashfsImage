@@ -51,7 +51,7 @@ from .macro import (
     SQUASHFS_XATTR_BLOCKS,
     SQUASHFS_XATTR_BYTES,
 )
-from .structure import DirEntry, DirHeader
+from .structure import DirEntry, DirHeader, FragmentEntry, Superblock, XattrId, XattrTable
 from .structure.inode import InodeHeader, inomap
 
 
@@ -74,93 +74,6 @@ SQUASHFS_LOOKUP_TYPE = [
 ]
 
 
-class _SquashfsCommons(object):  # Explicit new-style class for Python 2
-
-    def read(self, myfile):
-        """Set values read from a file object."""
-        values = struct.unpack(self.FORMAT, myfile.read(self.SIZE))
-        for field, value in zip(self.FIELDS, values):
-            setattr(self, field, value)
-
-    @classmethod
-    def from_bytes(cls, buffer, offset=0):
-        inst = cls()
-        values = struct.unpack_from(cls.FORMAT, buffer, offset)
-        for field, value in zip(cls.FIELDS, values):
-            setattr(inst, field, value)
-        return inst
-
-
-class _SquashfsSuperBlock(_SquashfsCommons):
-
-    FORMAT = "<IIIIIHHHHHHQQQQQQQQ"
-    SIZE = struct.calcsize(FORMAT)
-    FIELDS = [
-        "s_magic", "inodes", "mkfs_time", "block_size", "fragments", "compression",
-        "block_log", "flags", "no_ids", "s_major", "s_minor", "root_inode",
-        "bytes_used", "id_table_start", "xattr_id_table_start", "inode_table_start",
-        "directory_table_start", "fragment_table_start", "lookup_table_start"
-    ]
-
-    def __init__(self):
-        self.s_magic = 0
-        self.inodes = 0
-        self.mkfs_time = 0
-        self.block_size = 0
-        self.fragments = 0
-        self.compression = 0
-        self.block_log = 0
-        self.flags = 0
-        self.no_ids = 0
-        self.s_major = 0
-        self.s_minor = 0
-        self.root_inode = 0
-        self.bytes_used = 0
-        self.id_table_start = 0
-        self.xattr_id_table_start = 0
-        self.inode_table_start = 0
-        self.directory_table_start = 0
-        self.fragment_table_start = 0
-        self.lookup_table_start = 0
-
-
-class _SquashfsFragmentEntry(_SquashfsCommons):
-
-    FORMAT = "<QII"
-    SIZE = struct.calcsize(FORMAT)
-    FIELDS = ["start_block", "size", "unused"]
-
-    def __init__(self):
-        self.start_block = 0
-        self.size = 0
-        self.unused = 0
-        self.fragment = None
-
-
-class _XattrId(_SquashfsCommons):  # 16
-
-    FORMAT = "<QII"
-    SIZE = struct.calcsize(FORMAT)
-    FIELDS = ["xattr", "count", "size"]
-
-    def __init__(self):
-        self.xattr = 0
-        self.count = 0
-        self.size = 0
-
-
-class _XattrTable(_SquashfsCommons):
-
-    FORMAT = "<QII"
-    SIZE = struct.calcsize(FORMAT)
-    FIELDS = ["xattr_table_start", "xattr_ids", "unused"]
-
-    def __init__(self):
-        self.xattr_table_start = 0
-        self.xattr_ids = 0
-        self.unused = 0
-
-
 class SquashFsImage(object):
 
     def __init__(self, fd, offset=0, closefd=True):
@@ -168,7 +81,7 @@ class SquashFsImage(object):
         self._offset = offset
         self._closefd = closefd
         self.comp = None
-        self.sBlk = _SquashfsSuperBlock()
+        self.sBlk = None
         self.fragment_buffer_size = FRAGMENT_BUFFER_DEFAULT
         self.data_buffer_size = DATA_BUFFER_DEFAULT
         self.block_size = 0
@@ -210,7 +123,7 @@ class SquashFsImage(object):
         self._fd = None
 
     def _read_super(self):
-        self.sBlk.read(self._fd)
+        self.sBlk = Superblock.from_fd(self._fd)
         if self.sBlk.s_magic != SQUASHFS_MAGIC or self.sBlk.s_major != 4 or self.sBlk.s_minor != 0:
             raise IOError("The file supplied is not a squashfs 4.0 image")
         self.comp = self._get_compressor(self.sBlk.compression)
@@ -311,8 +224,8 @@ class SquashFsImage(object):
             table += self._read_block(index, expected)[0]
         ofs = 0
         while ofs < len(table):
-            entry = _SquashfsFragmentEntry.from_bytes(table, ofs)
-            ofs += _SquashfsFragmentEntry.SIZE
+            entry = FragmentEntry.from_bytes(table, ofs)
+            ofs += sizeof(FragmentEntry)
             entry.fragment = self._read_data_block(entry.start_block, entry.size)
             self.fragment_table.append(entry)
 
@@ -407,11 +320,10 @@ class SquashFsImage(object):
 
     def _read_xattrs_from_disk(self):
         # read_xattrs.c
-        id_table = _XattrTable()
         if self.sBlk.xattr_id_table_start == SQUASHFS_INVALID_BLK:
             return SQUASHFS_INVALID_BLK
         self._fd.seek(self._offset + self.sBlk.xattr_id_table_start)
-        id_table.read(self._fd)
+        id_table = XattrTable.from_fd(self._fd)
         ids = id_table.xattr_ids
         xattr_table_start = id_table.xattr_table_start
         indexes = SQUASHFS_XATTR_BLOCKS(ids)
@@ -429,9 +341,9 @@ class SquashFsImage(object):
             cur_idx = (i * SQUASHFS_METADATA_SIZE) / 16
             ofs = 0
             while ofs < len(block):
-                xattr_ids[cur_idx] = _XattrId.from_bytes(block, ofs)
+                xattr_ids[cur_idx] = XattrId.from_bytes(block, ofs)
                 cur_idx += 1
-                ofs += _XattrId.SIZE
+                ofs += sizeof(XattrId)
         start = xattr_table_start
         i = 0
         while start < index[0]:
