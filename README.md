@@ -1,4 +1,4 @@
-PySquashfsImage is a lightweight library for reading squashfs image files in Python.
+PySquashfsImage is a lightweight library for reading squashfs 4.0 image files in Python.
 It provides a way to read squashfs images header and to retrieve encapsulated binaries.
 It is compatible with Python 2.7 and Python 3.1+.
 
@@ -149,4 +149,45 @@ Special files are ignored.
 Example command that will extract `/bin` under `/tmp`:
 ```
 $ pysquashfs extract myimage.img -p /bin -d /tmp
+```
+
+### Scan
+
+```
+$ pysquashfs scan -h
+usage: pysquashfsimage scan [-h] file
+
+Find and show all the superblocks that can be found in a file
+
+positional arguments:
+  file        squashfs filesystem
+
+optional arguments:
+  -h, --help  show this help message and exit
+```
+
+Output is similar to `unsquashfs -s`.
+
+Example:
+```
+$ pysquashfs scan myimage.img
+Superblock #1
+Magic:                        0x73717368
+Major:                        4
+Minor:                        0
+Creation or last append time: 2018-06-16 16:46:23
+Size:                         7864320
+Compression:                  XZ
+Block size:                   524288
+Flags:                        192
+Number of fragments:          27
+Number of inodes:             361
+Number of ids:                1
+Inode table start:            0x77E924
+Directory table start:        0x77FAF2
+Fragment table start:         0x781448
+Lookup table start:           0x7817C6
+ID table start:               0x7817D4
+xattr ID table start:         0xFFFFFFFFFFFFFFFF
+Offset:                       161843
 ```

@@ -7,8 +7,10 @@ import sys
 from datetime import datetime
 
 from . import SquashFsImage
+from .const import Compression
 from .extract import extract_dir, extract_file
 from .file import BlockDevice, CharacterDevice
+from .util import find_superblocks
 
 ROOT = posixpath.sep
 
@@ -74,36 +76,73 @@ def list_(args):
     print("{} file(s) found".format(count))
 
 
+def scan(args):
+    width = 29
+    superblocks = find_superblocks(args.file)
+    if not superblocks:
+        print("No squashfs 4.0 superblock found")
+        return
+    for idx, superblock in enumerate(superblocks):
+        sblk = argparse.Namespace(**superblock)
+        print("Superblock #{}".format(idx + 1))
+        print("{:{width}} 0x{:X}".format("Magic:", sblk.s_magic, width=width))
+        print("{:{width}} {}".format("Major:", sblk.s_major, width=width))
+        print("{:{width}} {}".format("Minor:", sblk.s_minor, width=width))
+        print("{:{width}} {}".format("Creation or last append time:", _dtfromts(sblk.mkfs_time, args.utc), width=width))
+        print("{:{width}} {}".format("Size:", sblk.bytes_used, width=width))
+        print("{:{width}} {}".format("Compression:", Compression(sblk.compression).name, width=width))
+        print("{:{width}} {}".format("Block size:", sblk.block_size, width=width))
+        print("{:{width}} {}".format("Flags:", sblk.flags, width=width))
+        print("{:{width}} {}".format("Number of fragments:", sblk.fragments, width=width))
+        print("{:{width}} {}".format("Number of inodes:", sblk.inodes, width=width))
+        print("{:{width}} {}".format("Number of ids:", sblk.no_ids, width=width))
+        print("{:{width}} 0x{:X}".format("Inode table start:", sblk.inode_table_start, width=width))
+        print("{:{width}} 0x{:X}".format("Directory table start:", sblk.directory_table_start, width=width))
+        print("{:{width}} 0x{:X}".format("Fragment table start:", sblk.fragment_table_start, width=width))
+        print("{:{width}} 0x{:X}".format("Lookup table start:", sblk.lookup_table_start, width=width))
+        print("{:{width}} 0x{:X}".format("ID table start:", sblk.id_table_start, width=width))
+        print("{:{width}} 0x{:X}".format("xattr ID table start:", sblk.xattr_id_table_start, width=width))
+        print("{:{width}} {}".format("Offset:", sblk.offset, width=width))
+        if idx != len(superblocks) - 1:
+            print()
+
+
 def main():
     parser = argparse.ArgumentParser(description="Print information about squashfs images.")
     parser.add_argument("-V", "--version", action="version", version="%(prog)s v0.8.0")
     subparsers = parser.add_subparsers()  # TODO: required=True Python 3
 
-    parent = argparse.ArgumentParser(add_help=False)
-    parent.add_argument("file", help="squashfs filesystem")
-    parent.add_argument("-o", "--offset", type=int, default=0, help="absolute position of file system's start. Default: %(default)s")
+    pfile = argparse.ArgumentParser(add_help=False)
+    pfile.add_argument("file", help="squashfs filesystem")
+    
+    poffset = argparse.ArgumentParser(add_help=False)
+    poffset.add_argument("-o", "--offset", type=int, default=0, help="absolute position of file system's start. Default: %(default)s")
 
     helplist = "List the contents of the file system"
-    parser_l = subparsers.add_parser("list", parents=[parent], help=helplist.lower(), description=helplist)
+    parser_l = subparsers.add_parser("list", parents=[pfile, poffset], help=helplist.lower(), description=helplist)
     parser_l.add_argument("-p", "--path", default=ROOT, help="absolute path of directory or file to list. Default: %(default)r")
     parser_l.add_argument("-r", "--recursive", action="store_true", help="whether to list recursively. For the root directory the value is inverted. Default: %(default)s")
     parser_l.add_argument("-t", "--type", nargs='+', metavar="TYPE", choices=list("fdlpsbc"), help="when listing a directory, filter by file type with %(choices)s")
     parser_l.set_defaults(func=list_)
 
     helpextr = "Extract files from the file system"
-    parser_e = subparsers.add_parser("extract", parents=[parent], help=helpextr.lower(), description=helpextr)
+    parser_e = subparsers.add_parser("extract", parents=[pfile, poffset], help=helpextr.lower(), description=helpextr)
     parser_e.add_argument("-d", "--dest", help="directory that will contain the extracted file(s). If it doesn't exist it will be created. Default: current directory")
     parser_e.add_argument("-p", "--path", default=ROOT, help="absolute path of directory or file to extract. Default: %(default)r")
     parser_e.add_argument("-f", "--force", action="store_true", help="overwrite files that already exist. Default: %(default)s")
     parser_e.add_argument("-q", "--quiet", action="store_true", help="don't print extraction status. Default: %(default)s")
     parser_e.set_defaults(func=extract)
 
+    helpscan = "Find and show all the superblocks that can be found in a file"
+    parser_s = subparsers.add_parser("scan", parents=[pfile], help=helpscan.lower(), description=helpscan)
+    parser_s.set_defaults(func=scan)
+
     args = parser.parse_args()
     if "file" not in args:
         parser.error("the following arguments are required: subcommand")
     if not os.path.isfile(args.file):
         sys.exit("error: file does not exist")
-    if not posixpath.isabs(args.path):
+    if "path" in args and not posixpath.isabs(args.path):
         sys.exit("error: path is not absolute")
     if "offset" in args and args.offset is not None and args.offset < 0:
         sys.exit("error: offset cannot be negative")

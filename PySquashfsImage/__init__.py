@@ -29,7 +29,6 @@ from .const import (
     FRAGMENT_BUFFER_DEFAULT,
     SQUASHFS_INVALID_BLK,
     SQUASHFS_INVALID_FRAG,
-    SQUASHFS_MAGIC,
     SQUASHFS_METADATA_SIZE,
     Type,
 )
@@ -53,6 +52,7 @@ from .macro import (
 )
 from .structure import DirEntry, DirHeader, FragmentEntry, Superblock, XattrId, XattrTable
 from .structure.inode import InodeHeader, inomap
+from .util import check_super
 
 
 SQUASHFS_LOOKUP_TYPE = [
@@ -124,7 +124,7 @@ class SquashFsImage(object):
 
     def _read_super(self):
         self.sBlk = Superblock.from_fd(self._fd)
-        if self.sBlk.s_magic != SQUASHFS_MAGIC or self.sBlk.s_major != 4 or self.sBlk.s_minor != 0:
+        if not check_super(self.sBlk):
             raise IOError("The file supplied is not a squashfs 4.0 image")
         self.comp = self._get_compressor(self.sBlk.compression)
 
