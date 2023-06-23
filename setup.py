@@ -17,10 +17,10 @@ setup(
     url='https://github.com/matteomattei/PySquashfsImage',
     packages=find_packages(),
     keywords=["filesystem", "parser", "squash", "squashfs"],
-    python_requires=">=2.7",
+    python_requires=">=2.7, !=3.0.*",
     install_requires=[
-        "argparse;python_version>='3.0' and python_version<'3.2'",
-        "enum34;python_version<'3.4'"
+        "argparse;python_version == '3.1'",
+        "enum34;python_version < '3.4'"
     ],
     classifiers=[
         "Development Status :: 4 - Beta",
