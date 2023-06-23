@@ -7,7 +7,7 @@ def has_xattrs(file):
     # unsquashfs_xattr.c
     return (
         file.xattr != SQUASHFS_INVALID_XATTR
-        and file.image.sBlk.xattr_id_table_start != SQUASHFS_INVALID_BLK
+        and file.image.sblk.xattr_id_table_start != SQUASHFS_INVALID_BLK
     )
 
 

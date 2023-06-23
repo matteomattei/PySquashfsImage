@@ -81,7 +81,7 @@ class SquashFsImage(object):
         self._offset = offset
         self._closefd = closefd
         self.comp = None
-        self.sBlk = None
+        self.sblk = None
         self.fragment_buffer_size = FRAGMENT_BUFFER_DEFAULT
         self.data_buffer_size = DATA_BUFFER_DEFAULT
         self.block_size = 0
@@ -123,10 +123,10 @@ class SquashFsImage(object):
         self._fd = None
 
     def _read_super(self):
-        self.sBlk = Superblock.from_fd(self._fd)
-        if not check_super(self.sBlk):
+        self.sblk = Superblock.from_fd(self._fd)
+        if not check_super(self.sblk):
             raise IOError("The file supplied is not a squashfs 4.0 image")
-        self.comp = self._get_compressor(self.sBlk.compression)
+        self.comp = self._get_compressor(self.sblk.compression)
 
     def _get_compressor(self, compression_id):
         if compression_id not in compressors:
@@ -136,16 +136,16 @@ class SquashFsImage(object):
     def _initialize(self):
         self._fd.seek(self._offset)
         self._read_super()
-        self.block_size = self.sBlk.block_size
-        self.block_log = self.sBlk.block_log
+        self.block_size = self.sblk.block_size
+        self.block_log = self.sblk.block_log
         self.fragment_buffer_size <<= 20 - self.block_log
         self.data_buffer_size <<= 20 - self.block_log
         self.all_buffers_size = self.fragment_buffer_size + self.data_buffer_size
         self._read_uids_guids()
         self._read_fragment_table()
         self._read_xattrs_from_disk()
-        root_block = SQUASHFS_INODE_BLK(self.sBlk.root_inode)
-        root_offs = SQUASHFS_INODE_OFFSET(self.sBlk.root_inode)
+        root_block = SQUASHFS_INODE_BLK(self.sblk.root_inode)
+        root_offs = SQUASHFS_INODE_OFFSET(self.sblk.root_inode)
         self._root = self._dir_scan(root_block, root_offs)
 
     def _read_data_block(self, start, size):
@@ -200,7 +200,7 @@ class SquashFsImage(object):
         """
         self._fd.seek(self._offset + start)
         c_byte = self._read_short()
-        offset = 3 if SQUASHFS_CHECK_DATA(self.sBlk.flags) else 2
+        offset = 3 if SQUASHFS_CHECK_DATA(self.sblk.flags) else 2
         self._fd.seek(self._offset + start + offset)
         size = SQUASHFS_COMPRESSED_SIZE(c_byte)
         block = self._fd.read(size)
@@ -209,11 +209,11 @@ class SquashFsImage(object):
         return block, start + offset + size
 
     def _read_fragment_table(self):
-        bytes_ = SQUASHFS_FRAGMENT_BYTES(self.sBlk.fragments)
-        indexes = SQUASHFS_FRAGMENT_INDEXES(self.sBlk.fragments)
-        if self.sBlk.fragments == 0:
+        bytes_ = SQUASHFS_FRAGMENT_BYTES(self.sblk.fragments)
+        indexes = SQUASHFS_FRAGMENT_INDEXES(self.sblk.fragments)
+        if self.sblk.fragments == 0:
             return
-        self._fd.seek(self._offset + self.sBlk.fragment_table_start)
+        self._fd.seek(self._offset + self.sblk.fragment_table_start)
         fragment_table_index = [self._read_long() for _ in range(indexes)]
         table = b''
         for i, index in enumerate(fragment_table_index):
@@ -236,7 +236,7 @@ class SquashFsImage(object):
 
     def _read_inode(self, start_block, offset):
         # unsquash-4.c
-        start = self.sBlk.inode_table_start + start_block
+        start = self.sblk.inode_table_start + start_block
         idata, start, offset = self._read_inode_data(start, offset, sizeof(InodeHeader))
         header = InodeHeader.from_bytes(idata)
         cls = inomap[header.inode_type]
@@ -255,10 +255,10 @@ class SquashFsImage(object):
             ino._block_offset = offset
             if ino.fragment == SQUASHFS_INVALID_FRAG:
                 ino._frag_bytes = 0
-                ino._blocks = (ino.data + self.sBlk.block_size - 1) >> self.sBlk.block_log
+                ino._blocks = (ino.data + self.sblk.block_size - 1) >> self.sblk.block_log
             else:
-                ino._frag_bytes = ino.file_size % self.sBlk.block_size
-                ino._blocks = ino.data >> self.sBlk.block_log
+                ino._frag_bytes = ino.file_size % self.sblk.block_size
+                ino._blocks = ino.data >> self.sblk.block_log
         elif inode_type in (Type.SYMLINK, Type.LSYMLINK):
             idata, start, offset = self._read_inode_data(start, offset, ino.symlink_size)
             ino._symlink = idata
@@ -274,7 +274,7 @@ class SquashFsImage(object):
         directory.entries = []
         if inode.data == 3:
             return directory
-        start = self.sBlk.directory_table_start + inode.start
+        start = self.sblk.directory_table_start + inode.start
         offset = inode.offset
         size = inode.data - 3
         bytes_ = 0
@@ -299,10 +299,10 @@ class SquashFsImage(object):
 
     def _read_uids_guids(self):
         size = 4
-        bytes_ = SQUASHFS_ID_BYTES(self.sBlk.no_ids)
-        indexes = SQUASHFS_ID_BLOCKS(self.sBlk.no_ids)
+        bytes_ = SQUASHFS_ID_BYTES(self.sblk.no_ids)
+        indexes = SQUASHFS_ID_BLOCKS(self.sblk.no_ids)
         id_index_table = []
-        self._fd.seek(self._offset + self.sBlk.id_table_start)
+        self._fd.seek(self._offset + self.sblk.id_table_start)
         for _ in range(indexes):
             id_index_table.append(self._make_integer(SQUASHFS_ID_BLOCK_BYTES(1)))
         for i, idx in enumerate(id_index_table):
@@ -320,9 +320,9 @@ class SquashFsImage(object):
 
     def _read_xattrs_from_disk(self):
         # read_xattrs.c
-        if self.sBlk.xattr_id_table_start == SQUASHFS_INVALID_BLK:
+        if self.sblk.xattr_id_table_start == SQUASHFS_INVALID_BLK:
             return SQUASHFS_INVALID_BLK
-        self._fd.seek(self._offset + self.sBlk.xattr_id_table_start)
+        self._fd.seek(self._offset + self.sblk.xattr_id_table_start)
         id_table = XattrTable.from_fd(self._fd)
         ids = id_table.xattr_ids
         xattr_table_start = id_table.xattr_table_start
