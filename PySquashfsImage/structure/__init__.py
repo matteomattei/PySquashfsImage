@@ -5,6 +5,12 @@ from ..const import Type
 
 class _Base(LittleEndianStructure):
 
+    def __iter__(self):
+        # This allows calling dict() on instances of this class.
+        for name, _ in self._fields_:
+            name = name.lstrip('_')
+            yield name, getattr(self, name)
+
     @classmethod
     def from_bytes(cls, bytes_, offset=0):
         return cls.from_buffer_copy(bytes_, offset)
