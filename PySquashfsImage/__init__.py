@@ -198,6 +198,7 @@ class SquashFsImage(object):
 
         Return the uncompressed block and the start of the next compressed one.
         """
+        # unsquashfs.c
         self._fd.seek(self._offset + start)
         c_byte = self._read_short()
         offset = 3 if SQUASHFS_CHECK_DATA(self.sblk.flags) else 2
@@ -209,6 +210,7 @@ class SquashFsImage(object):
         return block, start + offset + size
 
     def _read_fragment_table(self):
+        # unsquash-4.c
         bytes_ = SQUASHFS_FRAGMENT_BYTES(self.sblk.fragments)
         indexes = SQUASHFS_FRAGMENT_INDEXES(self.sblk.fragments)
         if self.sblk.fragments == 0:
@@ -226,7 +228,6 @@ class SquashFsImage(object):
         while ofs < len(table):
             entry = FragmentEntry.from_bytes(table, ofs)
             ofs += sizeof(FragmentEntry)
-            entry.fragment = self._read_data_block(entry.start_block, entry.size)
             self.fragment_table.append(entry)
 
     def _read_fragment(self, fragment):
