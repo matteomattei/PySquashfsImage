@@ -22,6 +22,11 @@ import stat
 import struct
 import sys
 from ctypes import sizeof
+try:
+    from functools import lru_cache
+except ImportError:
+    def lru_cache(maxsize=128, typed=False):
+        return lambda user_function: user_function
 
 from .compressor import compressors
 from .const import (
@@ -148,6 +153,7 @@ class SquashFsImage(object):
         root_offs = SQUASHFS_INODE_OFFSET(self.sblk.root_inode)
         self._root = self._dir_scan(root_block, root_offs)
 
+    @lru_cache(maxsize=256)
     def _read_data_block(self, start, size):
         c_byte = SQUASHFS_COMPRESSED_SIZE_BLOCK(size)
         self._fd.seek(self._offset + start)
