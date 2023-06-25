@@ -81,7 +81,7 @@ with SquashFsImage.from_file('/path/to/my/image.img') as image:
 
 ```
 $ pysquashfs list -h
-usage: pysquashfs list [-h] [-o OFFSET] [-p PATH] [-r] [-t TYPE [TYPE ...]] file
+usage: pysquashfs list [-h] [-o OFFSET] [--utc] [--showtz] [-p PATH] [-r] [-t TYPE [TYPE ...]] file
 
 List the contents of the file system
 
@@ -91,6 +91,8 @@ positional arguments:
 optional arguments:
   -h, --help                  show this help message and exit
   -o OFFSET, --offset OFFSET  absolute position of file system's start. Default: 0
+  --utc                       use UTC rather than local time zone when displaying time. Default: False
+  --showtz                    show UTC offset when displaying time. Default: False
   -p PATH, --path PATH        absolute path of directory or file to list. Default: '/'
   -r, --recursive             whether to list recursively. For the root directory the value is inverted. Default: False
   -t TYPE [TYPE ...], --type TYPE [TYPE ...]
@@ -155,7 +157,7 @@ $ pysquashfs extract myimage.img -p /bin -d /tmp
 
 ```
 $ pysquashfs scan -h
-usage: pysquashfsimage scan [-h] file
+usage: pysquashfs scan [-h] [--utc] [--showtz] file
 
 Find and show all the superblocks that can be found in a file
 
@@ -164,6 +166,8 @@ positional arguments:
 
 optional arguments:
   -h, --help  show this help message and exit
+  --utc       use UTC rather than local time zone when displaying time. Default: False
+  --showtz    show UTC offset when displaying time. Default: False
 ```
 
 Output is similar to `unsquashfs -s`.

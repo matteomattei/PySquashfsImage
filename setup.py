@@ -20,7 +20,8 @@ setup(
     python_requires=">=2.7, !=3.0.*",
     install_requires=[
         "argparse;python_version == '3.1'",
-        "enum34;python_version < '3.4'"
+        "enum34;python_version < '3.4'",
+        "python-dateutil;python_version < '3.6'"
     ],
     classifiers=[
         "Development Status :: 4 - Beta",

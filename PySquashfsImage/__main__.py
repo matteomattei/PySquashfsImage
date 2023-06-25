@@ -4,7 +4,19 @@ import argparse
 import os
 import posixpath
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
+try:
+    from datetime import timezone
+except ImportError:
+    pass
+from time import localtime
+
+_is36 = sys.version_info >= (3, 6)
+if not _is36:
+    from dateutil.tz import tzlocal, tzutc
+    UTC = tzutc()
+else:
+    UTC = timezone.utc
 
 from . import SquashFsImage
 from .const import Compression
@@ -12,6 +24,7 @@ from .extract import extract_dir, extract_file
 from .file import BlockDevice, CharacterDevice
 from .util import find_superblocks
 
+DTFMT = "%Y-%m-%d %H:%M:%S"
 ROOT = posixpath.sep
 
 
@@ -32,7 +45,18 @@ def extract(args):
             extract_file(file, dest, args.force, quiet=args.quiet)
 
 
-def print_file(file):
+def _dtfromts(timestamp, utc=False):
+    if utc:
+        tz = UTC
+    elif _is36:
+        time = localtime(timestamp)
+        tz = timezone(timedelta(seconds=time.tm_gmtoff), time.tm_zone)
+    else:
+        tz = tzlocal()
+    return datetime.fromtimestamp(timestamp, tz)
+
+
+def print_file(file, utc=False, show_tz=False):
     width = 25 - len(str(file.uid)) - len(str(file.gid))
     if isinstance(file, (BlockDevice, CharacterDevice)):
         width = max(0, width - 7)
@@ -40,12 +64,13 @@ def print_file(file):
     else:
         width = max(0, width)
         data = "{:{width}}".format(file.inode.data, width=width)
+    dt = _dtfromts(file.inode.time, utc)
     print("{} {}/{} {} {} {}".format(
         file.filemode,
         file.uid,
         file.gid,
         data,
-        datetime.fromtimestamp(file.inode.time),  # TODO: Add UTC when Python 3 only
+        dt if show_tz else dt.strftime(DTFMT),
         file.path
     ) + (" -> {}".format(file.readlink()) if file.is_symlink else ''))
 
@@ -60,18 +85,18 @@ def list_(args):
         if file is None:
             raise Exception("{} not found".format(args.path))
         if not file.is_dir:
-            print_file(file)
+            print_file(file, args.utc, args.show_tz)
             return
         recursive = not args.recursive if args.path == ROOT else args.recursive
         directory = file.riter() if recursive else file
         if types is None:
             for file in directory:
-                print_file(file)
+                print_file(file, args.utc, args.show_tz)
                 count += 1
         else:
             for file in directory:
                 if file.filemode[0] in types:
-                    print_file(file)
+                    print_file(file, args.utc, args.show_tz)
                     count += 1
     print("{} file(s) found".format(count))
 
@@ -84,11 +109,13 @@ def scan(args):
         return
     for idx, superblock in enumerate(superblocks):
         sblk = argparse.Namespace(**superblock)
+        dt = _dtfromts(sblk.mkfs_time, args.utc)
+        dtstr = dt if args.show_tz else dt.strftime(DTFMT)
         print("Superblock #{}".format(idx + 1))
         print("{:{width}} 0x{:X}".format("Magic:", sblk.s_magic, width=width))
         print("{:{width}} {}".format("Major:", sblk.s_major, width=width))
         print("{:{width}} {}".format("Minor:", sblk.s_minor, width=width))
-        print("{:{width}} {}".format("Creation or last append time:", _dtfromts(sblk.mkfs_time, args.utc), width=width))
+        print("{:{width}} {}".format("Creation or last append time:", dtstr, width=width))
         print("{:{width}} {}".format("Size:", sblk.bytes_used, width=width))
         print("{:{width}} {}".format("Compression:", Compression(sblk.compression).name, width=width))
         print("{:{width}} {}".format("Block size:", sblk.block_size, width=width))
@@ -118,8 +145,12 @@ def main():
     poffset = argparse.ArgumentParser(add_help=False)
     poffset.add_argument("-o", "--offset", type=int, default=0, help="absolute position of file system's start. Default: %(default)s")
 
+    ptz = argparse.ArgumentParser(add_help=False)
+    ptz.add_argument("--utc", action="store_true", help="use UTC rather than local time zone when displaying time. Default: %(default)s")
+    ptz.add_argument("--showtz", action="store_true", dest="show_tz", help="show UTC offset when displaying time. Default: %(default)s")
+
     helplist = "List the contents of the file system"
-    parser_l = subparsers.add_parser("list", parents=[pfile, poffset], help=helplist.lower(), description=helplist)
+    parser_l = subparsers.add_parser("list", parents=[pfile, poffset, ptz], help=helplist.lower(), description=helplist)
     parser_l.add_argument("-p", "--path", default=ROOT, help="absolute path of directory or file to list. Default: %(default)r")
     parser_l.add_argument("-r", "--recursive", action="store_true", help="whether to list recursively. For the root directory the value is inverted. Default: %(default)s")
     parser_l.add_argument("-t", "--type", nargs='+', metavar="TYPE", choices=list("fdlpsbc"), help="when listing a directory, filter by file type with %(choices)s")
@@ -134,7 +165,7 @@ def main():
     parser_e.set_defaults(func=extract)
 
     helpscan = "Find and show all the superblocks that can be found in a file"
-    parser_s = subparsers.add_parser("scan", parents=[pfile], help=helpscan.lower(), description=helpscan)
+    parser_s = subparsers.add_parser("scan", parents=[pfile, ptz], help=helpscan.lower(), description=helpscan)
     parser_s.set_defaults(func=scan)
 
     args = parser.parse_args()
