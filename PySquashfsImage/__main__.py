@@ -18,7 +18,7 @@ if not _is36:
 else:
     UTC = timezone.utc
 
-from . import SquashFsImage
+from . import SquashFsImage, __version__
 from .const import Compression
 from .extract import extract_dir, extract_file
 from .file import BlockDevice, CharacterDevice
@@ -136,12 +136,12 @@ def scan(args):
 
 def main():
     parser = argparse.ArgumentParser(description="Print information about squashfs images.")
-    parser.add_argument("-V", "--version", action="version", version="%(prog)s v0.8.0")
+    parser.add_argument("-V", "--version", action="version", version="%(prog)s {}".format(__version__))
     subparsers = parser.add_subparsers()  # TODO: required=True Python 3
 
     pfile = argparse.ArgumentParser(add_help=False)
     pfile.add_argument("file", help="squashfs filesystem")
-    
+
     poffset = argparse.ArgumentParser(add_help=False)
     poffset.add_argument("-o", "--offset", type=int, default=0, help="absolute position of file system's start. Default: %(default)s")
 

@@ -16,6 +16,7 @@ http://squashfs.sourceforge.net/
 
 """
 __all__ = ["SquashFsImage"]
+__version__ = "0.8.0"
 
 import io
 import stat

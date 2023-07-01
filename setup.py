@@ -1,14 +1,26 @@
 #!/usr/bin/env python
 
+import os.path
 from io import open  # Remove this import when dropping Python 2 support
 from setuptools import setup, find_packages
 
 with open("README.md", 'r', encoding="utf8") as f:
     long_description = f.read()
 
+
+def get_version():
+    here = os.path.abspath(os.path.dirname(__file__))
+    with open(os.path.join(here, "PySquashfsImage/__init__.py")) as f:
+        for line in f:
+            if line.startswith("__version__"):
+                delim = '"' if '"' in line else "'"
+                return line.split(delim)[1]
+    raise RuntimeError("Unable to find version string.")
+
+
 setup(
     name='PySquashfsImage',
-    version='0.8.0',
+    version=get_version(),
     description='Squashfs image parser',
     long_description=long_description,
     long_description_content_type="text/markdown",
