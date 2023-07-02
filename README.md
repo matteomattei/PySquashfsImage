@@ -1,6 +1,6 @@
-PySquashfsImage is a lightweight library for reading squashfs 4.0 image files in Python.
-It provides a way to read squashfs images header and to retrieve encapsulated binaries.
-It is compatible with Python 2.7 and Python 3.1+.
+PySquashfsImage is a lightweight library and tool for reading and extracting
+squashfs 4.0 little endian images in Python. It provides a high-level API for
+easy access to these file systems. It is compatible with Python 2.7 and Python 3.1+.
 
 ## Installation
 
@@ -13,10 +13,10 @@ pip install PySquashfsImage
 Supported compression methods:
 
 - Gzip
-- [LZO](https://pypi.org/project/python-lzo/)
-- [LZ4](https://pypi.org/project/lz4/)
-- [XZ](https://pypi.org/project/backports.lzma/) (only for Python < 3.3)
-- [Zstandard](https://pypi.org/project/zstandard/)
+- [LZ4](https://pypi.org/project/lz4/) (requires Python 3.7+)
+- [LZO](https://pypi.org/project/python-lzo/) (requires Python 2.7 or 3.5+, also see [here](https://test.pypi.org/project/python-lzo/))
+- [XZ](https://pypi.org/project/backports.lzma/) (included in Python 3.3+)
+- [Zstandard](https://pypi.org/project/zstandard/) (requires Python 3.7+)
 
 Some of them require a third-party library that you'll need to install
 separately if needed.
@@ -24,6 +24,7 @@ separately if needed.
 ## Use as a library
 
 ### List all elements in the image:
+
 ```python
 from PySquashfsImage import SquashFsImage
 
@@ -33,7 +34,8 @@ for item in image:
 image.close()
 ```
 
-### Print all files and folder with human readable path:
+### Print all entries with their absolute path:
+
 ```python
 from PySquashfsImage import SquashFsImage
 
@@ -43,7 +45,8 @@ with SquashFsImage.from_file('/path/to/my/image.img') as image:
         print(file.path)
 ```
 
-### Print only files:
+### Print all entries that aren't directories:
+
 ```python
 from PySquashfsImage import SquashFsImage
 
@@ -58,8 +61,10 @@ with SquashFsImage.from_bytes(imgbytes) as image:
 ```
 
 ### Save the content of a file:
+
 ```python
 from PySquashfsImage import SquashFsImage
+from PySquashfsImage.extract import extract_file
 
 with SquashFsImage.from_file('/path/to/my/image.img') as image:
     myfile = image.find('myfilename')
@@ -73,6 +78,22 @@ with SquashFsImage.from_file('/path/to/my/image.img') as image:
     with open("myhugefile.big", "wb") as f:
         for block in hugefile.iter_bytes():
             f.write(block)
+
+    # Or use extract_file(), which preserves the file's metadata (except extended attributes).
+    extract_file(myfile, "myextractedfile")
+```
+
+### Save the content of a directory:
+
+```python
+from PySquashfsImage import SquashFsImage
+from PySquashfsImage.extract import extract_dir
+
+with SquashFsImage.from_file('/path/to/my/image.img') as image:
+    mydir = image.select("/mydir")
+    if mydir is not None:
+        # Metadata is handled the same way as with extract_file().
+        extract_dir(mydir, "/tmp/mydir")
 ```
 
 ## Use as a command
@@ -170,7 +191,7 @@ optional arguments:
   --showtz    show UTC offset when displaying time. Default: False
 ```
 
-Output is similar to `unsquashfs -s`.
+Output is similar to `unsquashfs -s [-UTC]`.
 
 Example:
 ```
