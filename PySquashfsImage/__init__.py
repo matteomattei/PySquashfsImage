@@ -7,12 +7,13 @@ Copyright 2011-2012
 Matteo Mattei <matteo.mattei@gmail.com>
 Nicola Ponzeveroni <nicola.ponzeveroni@gilbarco.com>
 
-It is intended to be used to access files into a SQUASHFS 4.0 image file.
+It is intended to be used to access files inside a Squashfs 4.0 little endian
+image file.
 
-Based on Phillip Lougher <phillip@lougher.demon.co.uk> Unsquash tool
+Based on squashfs-tools by Phillip Lougher <phillip@squashfs.org.uk>
 
 https://github.com/matteomattei/PySquashfsImage
-http://squashfs.sourceforge.net/
+https://github.com/plougher/squashfs-tools
 
 """
 __all__ = ["SquashFsImage"]
