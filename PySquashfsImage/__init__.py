@@ -17,7 +17,7 @@ https://github.com/plougher/squashfs-tools
 
 """
 __all__ = ["SquashFsImage"]
-__version__ = "0.8.0"
+__version__ = "0.9.0"
 
 import io
 import stat
