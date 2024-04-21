@@ -78,11 +78,11 @@ class LZ4Compressor(Compressor):
     name = "lz4"
 
     def __init__(self):
-        import lz4.frame
-        self._lib = lz4.frame
+        import lz4.block
+        self._lib = lz4.block
 
     def uncompress(self, src, size, outsize):
-        return self._lib.decompress(src)
+        return self._lib.decompress(src, outsize)
 
 
 class ZSTDCompressor(Compressor):

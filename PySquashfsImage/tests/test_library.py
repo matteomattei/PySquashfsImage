@@ -15,7 +15,7 @@ def _createFile(tarArchive, name, contents):
     tarArchive.addfile(tinfo, io.BytesIO(contents.encode()))
 
 
-@pytest.mark.parametrize("compression", ["", "gzip", "lzma", "lzo", "xz", "zstd"])
+@pytest.mark.parametrize("compression", ["", "gzip", "lz4", "lzma", "lzo", "xz", "zstd"])
 def test_compressions(compression):
     with tempfile.TemporaryDirectory() as tmpdir:
         tarPath = os.path.join(tmpdir, "foo.tar")
