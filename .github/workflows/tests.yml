@@ -1,0 +1,51 @@
+name: Tests
+
+on:
+  push:
+    branches: '**'
+    tags-ignore: '**'
+  pull_request:
+
+jobs:
+  Tests:
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+        python-version: ['3.7', '3.12']
+
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - uses: msys2/setup-msys2@v2
+      if: startsWith( matrix.os, 'windows' )
+
+    - name: Install Dependencies (Linux)
+      if: startsWith( matrix.os, 'ubuntu' )
+      run: |
+        sudo apt-get -y install liblzo2-dev
+
+    - name: Install pip Dependencies
+      run: |
+        python3 -m pip install --upgrade pip
+        python3 -m pip install --upgrade wheel setuptools twine pytest python-lzo lz4 zstandard
+
+    - name: Test Installation From Tarball
+      run: |
+        python3 setup.py clean check build sdist bdist_egg bdist_wheel
+        twine check dist/*
+        python3 -m pip install "$( find dist -name '*.tar.gz' | head -1 )"
+
+    - name: Unit Tests
+      run: |
+        pytest PySquashfsImage/tests/test_*.py
